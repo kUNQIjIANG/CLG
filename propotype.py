@@ -3,7 +3,7 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.python.layers.core import Dense
 
-
+#adding to push
 
 #decoder_emb_inp = tf.get_variable("decoder_inp",[1,5,10],initializer = initializer)
 tgt_sos_id = 0
