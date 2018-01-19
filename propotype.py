@@ -1,9 +1,9 @@
-
+#!/usr/bin/env python3.5
 import tensorflow as tf
 import numpy as np
 from tensorflow.python.layers.core import Dense
 
-#adding to push
+#test push
 
 #decoder_emb_inp = tf.get_variable("decoder_inp",[1,5,10],initializer = initializer)
 tgt_sos_id = 0
@@ -39,6 +39,13 @@ encoder_output, encoder_state = tf.nn.dynamic_rnn(encoder_cell, sour_embed, init
 
 print(sent_embed.shape)
 
+latent_size = 5
+u = tf.layers.dense(encoder_state[0],5,tf.nn.sigmoid)
+s = tf.layers.dense(encoder_state[0],5,tf.nn.tanh)
+
+z = u + s * tf.truncated_normal(tf.shape(u),1,-1)
+z = tf.contrib.rnn.LSTMStateTuple(z,z)
+
 
 
 """
@@ -52,7 +59,7 @@ attention_mechanism = tf.contrib.seq2seq.LuongAttention(hid_units,
 decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units)
 
 decoder_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism,
-												   initial_cell_state = encoder_state,
+												   initial_cell_state = z,
                                                    attention_layer_size = hid_units)
 
 helper = tf.contrib.seq2seq.TrainingHelper(inputs = sent_embed,
@@ -65,13 +72,24 @@ decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell, greedyHelper,
                                           initial_state = initial_state,
                                           output_layer = Dense(vocab_size))
 
-outputs, final_context_state, _ = tf.contrib.seq2seq.dynamic_decode(decoder,maximum_iterations = 10)
+outputs, final_context_state, _ = tf.contrib.seq2seq.dynamic_decode(decoder,maximum_iterations = 7)
 #
 
 logits = outputs.rnn_output
 print(logits.shape)
 hightest_indice = outputs.sample_id
 
+seq_mask = tf.cast(tf.sequence_mask([6],7),tf.float32)
+target = tf.reshape(input_sent,[1,7])
+logits = tf.reshape(logits, [1,7,57])
+seq_loss = tf.contrib.seq2seq.sequence_loss(logits, target, seq_mask,average_across_timesteps = False,average_across_batch = True)
+kl_loss = 0.5 * tf.reduce_sum(tf.exp(s) + tf.square(u) - 1 - s)
+loss = seq_loss + kl_loss
+
+optimizer = tf.train.AdamOptimizer(learning_rate=1e-4)
+gvs = optimizer.compute_gradients(loss)
+clipped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
+train_step = optimizer.apply_gradients(clipped_gvs)
 
 with tf.Session() as sess:
 
@@ -91,10 +109,14 @@ with tf.Session() as sess:
     test_sent = np.array([sent_id])
 
     sess.run(tf.global_variables_initializer())
-    outputs, ind = sess.run([logits,hightest_indice], feed_dict = {batch_sent : test_sent, input_sent : source_id})
+    outputs, ind, s_l, k_l, los, _ = sess.run([logits,hightest_indice,seq_loss,kl_loss,loss, train_step], feed_dict = {batch_sent : test_sent, input_sent : source_id})
 
     print(outputs.shape)
     print("ind", ind)
+    print("seq_loss", s_l)
+    print("kl_loss", k_l)
+    print("loss", los)
+
 
     for sent in ind:
         print(' '.join([id2word[id] for id in sent]))
