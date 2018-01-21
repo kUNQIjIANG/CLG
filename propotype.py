@@ -1,6 +1,9 @@
 #!/usr/bin/env python3.5
 import tensorflow as tf
 import numpy as np
+import gensim
+import pickle
+import os
 from tensorflow.python.layers.core import Dense
 
 #test push
@@ -9,49 +12,65 @@ from tensorflow.python.layers.core import Dense
 tgt_sos_id = 0
 tgt_eos_id = 1
 batch_size = 5
-"""
-l = open("word.txt").read().split()
-vocab_size = len(l)
-print(vocab_size)
-print(l)
-"""
 
-wordVec = open("glove.50d.txt").read().split('\n')
-vocab_size = int(wordVec[0].split()[0]) + 2
-embed_size = int(wordVec[0].split()[1])
 
-SOS = np.random.randn(1,embed_size)
-EOS = np.random.randn(1,embed_size)
-word2id = {"<SOS>":0,"<EOS>":1}
-id2word = {0:"<SOS>",1:"<EOS>"}
-word_embeds = np.zeros([vocab_size,embed_size])
-word_embeds[0] = SOS
-word_embeds[1] = EOS
-for i, word_line in enumerate(wordVec[1:-1]):
-    line_split = word_line.split()
-    word = line_split[0]
-    vec = line_split[1:]
-    word2id[word] = i+2
-    id2word[i+2] = word
-    word_embeds[i+2] = list(map(float,vec))
-word2id["what's"] = word2id["what"]
-id2word[word2id["what"]] = "what's"
+if os.path.isfile("word_embeddings.pickle"):
+    word_embeddings = pickle.load(open('word_embeddings.pickle','rb'))
+    word2id = pickle.load(open('word2id.pickle','rb'))
+    id2word = pickle.load(open('id2word.pickle','rb'))
+    vocab_size = pickle.load(open('vocab_size.pickle','rb'))
+    vocab = pickle.load(open('vocab.pickle','rb'))
+else:
+    word2vec = gensim.models.KeyedVectors.load_word2vec_format('glove.50d.txt', binary=False)
+    vocab = []
+    for joke in open("shorterjokes.txt").read().split("\n"):
+        for word in joke.split():
+            if word.lower() in word2vec.wv.vocab and word.lower() not in vocab:
+                vocab.append(word.lower())
+    print(len(vocab))
+
+    vocab_size = len(vocab) + 3
+    embed_size = 50
+    word2id = {w:i+3 for i,w in enumerate(vocab)}
+    id2word = {i+3: w for i,w in enumerate(vocab)}
+    word2id["<Sos>"] = 0
+    word2id["<Eos>"] = 1
+    word2id["<Unk>"] = 2
+    id2word[0] = "<Sos>"
+    id2word[1] = "<Eos>"
+    id2word[2] = "<Unk>"
+    word_embeddings = np.zeros([vocab_size, embed_size])
+    Sos = np.zeros([1,embed_size])
+    Eos = np.ones([1,embed_size])
+    Unk = np.zeros([1,embed_size])
+    for word in vocab:
+        word_embeddings[word2id[word]] = word2vec[word]
+
+    pickle.dump(word_embeddings, open("word_embeddings.pickle", "wb"))
+    pickle.dump(word2id, open("word2id.pickle", "wb"))
+    pickle.dump(id2word, open("id2word.pickle", "wb"))
+    pickle.dump(vocab_size, open("vocab_size.pickle", "wb"))
+    pickle.dump(vocab, open("vocab.pickle","wb"))
+
 
 print("load word embedding done")
 
-#source_len = 7
+
 embed_size = 50
 max_len = tf.placeholder(tf.int32, shape = [])
-dec_sent = tf.placeholder(tf.int32, shape = [None, None])
-enc_sent = tf.placeholder(tf.int32, shape = [None, None])
+enc_sent = tf.placeholder(tf.int32, shape = [None, 10])
+dec_sent = tf.placeholder(tf.int32, shape = [None, 10+1])
+tar_sent = tf.placeholder(tf.int32, shape = [None, 10+1])
 source_len = tf.placeholder(tf.int32, shape = [None])
+
+dec_seq_len = source_len + 1
 
 
 hid_units = 5
 
 initializer = tf.random_uniform_initializer(-0.1, 0.1)
 
-word_embeddings = tf.cast(word_embeds,tf.float32)
+word_embeddings = tf.cast(word_embeddings,tf.float32)
 #tf.Variable(tf.random_uniform([vocab_size,embed_size],1,-1))
 
 dec_embed = tf.nn.embedding_lookup(word_embeddings, dec_sent)
@@ -89,105 +108,110 @@ decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units)
 decoder_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism,
 												   initial_cell_state = z,
                                                    attention_layer_size = hid_units)
-
-helper = tf.contrib.seq2seq.TrainingHelper(inputs = dec_embed,
-                                           sequence_length = [6]) # sequence_length is the decoder sequence lengh
-                                                                  # could be less than decoder input lengh but not more than decoder input lengh
+# sequence_length is the decoder sequence lengh
+# could be less than decoder input lengh but not more than decoder input lengh
+#[10, 11, 10, 10, 10]
+helper = tf.contrib.seq2seq.TrainingHelper(inputs = dec_embed,sequence_length = dec_seq_len) 
+                                           
 greedyHelper = tf.contrib.seq2seq.GreedyEmbeddingHelper(word_embeddings,tf.fill([batch_size],tgt_sos_id),tgt_eos_id)
 
 initial_state = decoder_cell.zero_state(dtype=tf.float32, batch_size = batch_size)
 # greedy helper is set up
-decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell, greedyHelper,
+decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell, helper,
                                           initial_state = initial_state,
                                           output_layer = Dense(vocab_size))
 
-outputs, final_context_state, _ = tf.contrib.seq2seq.dynamic_decode(decoder,maximum_iterations = 10)
+outputs, final_context_state, _ = tf.contrib.seq2seq.dynamic_decode(decoder,maximum_iterations = None)
 #
 
 logits = outputs.rnn_output
-print(logits.shape)
+
+
 hightest_indice = outputs.sample_id
 
-seq_mask = tf.cast(tf.sequence_mask(source_len,max_len),tf.float32)
-#target = tf.reshape(enc_sent,[1,7])
-#logits = tf.reshape(logits, [1,7,57])
-target = enc_sent
+seq_mask = tf.cast(tf.sequence_mask(dec_seq_len,max_len+1),tf.float32)
+#for_con = tf.zeros([5,1,12144])
+#logits = tf.concat([logits,for_con],axis = 1)
+logits = tf.reshape(logits,[5,11,12144])
+target = tf.reshape(tar_sent,[5,11])
 seq_loss = tf.contrib.seq2seq.sequence_loss(logits, target, seq_mask,average_across_timesteps = False,average_across_batch = True)
 kl_loss = 0.5 * tf.reduce_sum(tf.exp(s) + tf.square(u) - 1 - s)
-loss = seq_loss + kl_loss
+loss = tf.reduce_sum(seq_loss + kl_loss)
 
-optimizer = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(loss)
+#train_step = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(loss)
+#optimizer = tf.train.AdamOptimizer(1e-3)
+#gradients, variables = zip(*optimizer.compute_gradients(loss))
+#gradients, _ = tf.clip_by_global_norm(gradients, 1.0)
+#train_step = optimizer.apply_gradients(zip(gradients, variables))
+
+optimizer = tf.train.AdamOptimizer(1e-3)
+gradients, variables = zip(*optimizer.compute_gradients(loss))
+gradients = [
+    None if gradient is None else tf.clip_by_value(gradient,-1.0,1.0)
+    for gradient in gradients]
+train_step = optimizer.apply_gradients(zip(gradients, variables))
+
+#optimizer = tf.train.AdamOptimizer(learning_rate=1e-4)
 #gvs = optimizer.compute_gradients(loss)
 #clipped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
 #train_step = optimizer.apply_gradients(clipped_gvs)
+
 def next_batch(data, batch_size):
     for i in range(0, len(data), batch_size):
         yield data[i:i+batch_size]
 
 with tf.Session() as sess:
-
-    """
-    word2id = {w:i for i,w in enumerate(l)}
-    id2word = {i:w for i,w in enumerate(l)}
-
-
-    encoder_sent = ["we presume the scale is pages all",
-                    "every month Google re-indexing! web pages scale",
-                    "all pages of the web"]
-
-    encoder_word = [sent.split() for sent in encoder_sent]
-    encoder_seq_len = [len(s) for s in encoder_word]
-    enc_max_len = np.max(encoder_seq_len)
-    enc_sent_id = [[word2id[w] for w in words] for words in encoder_word]
-    enc_id_matrix = np.full([len(encoder_sent),enc_max_len], 0)
-    for i, sent_id in enumerate(enc_sent_id):
-        enc_id_matrix[i,:len(sent_id)] = sent_id
-
-    sent = "the web Google does presume logarithmic month If presume maximum PR the we scale"
-    sent_word = sent.split()
-    sent_id = [word2id[w] for w in sent_word]
-    test_sent = np.array([sent_id])
-    """
-
+    sess.run(tf.global_variables_initializer())
 
     joke_data = open("shorterjokes.txt",'r').read().split('\n')
-
     generator = next_batch(joke_data,5)
 
     batch_size = 5
     inp_max_len = 10
-    enc_inp = np.ones([batch_size,inp_max_len])
-    for _,jokes in enumerate(generator):
+    #fall = [4,17,26,28,30,34,36,38,55,59,65,72,77]
+    f = [4,17]
+    for step,jokes in enumerate(generator):
+        if step in f:
+            continue
         inp_len = []
+        enc_inp = np.ones([batch_size,inp_max_len])
         for i,joke in enumerate(jokes):
             joke_word = joke.split()
             leng = len(joke_word)
             inp_len.append(leng)
             joke_w_id = []
             for word in joke_word:
-                if word.lower() in word2id.keys():
+                if word.lower() in vocab:
                     joke_w_id.append(word2id[word.lower()])
                 else:
-                    joke_w_id.append(word2id["<unk>"])
+                    joke_w_id.append(word2id["<Unk>"])
             enc_inp[i,:leng] = joke_w_id
-        break
+        
 
-    sos_pad = np.zeros([5,1])
-    dec_inp = np.concatenate((sos_pad,enc_inp), axis = 1)
-    sess.run(tf.global_variables_initializer())
-    outputs, ind, s_l, k_l, los, _ = sess.run([logits,hightest_indice,seq_loss,kl_loss,loss, optimizer],
-                                                feed_dict = {enc_sent : enc_inp,
-                                                             dec_sent : dec_inp,
-                                                             source_len : inp_len,
-                                                             max_len: inp_max_len})
+        sos_pad = np.zeros([batch_size,1])
+        eos_pad = np.ones([batch_size,1])
+        dec_outp = np.concatenate((enc_inp,eos_pad), axis = 1)
+        dec_inp = np.concatenate((sos_pad,enc_inp), axis = 1)
+        print("step",step)
+        print("input len", inp_len)
+        print("enc_inp", enc_inp)
+        print("dec_inp",dec_inp)
+        print("dec_out",dec_outp)
+        
+        ind, outputs, _ = sess.run([hightest_indice, logits, train_step],
+                                                    feed_dict = {enc_sent : enc_inp,
+                                                                 dec_sent : dec_inp,
+                                                                 tar_sent : dec_outp,
+                                                                 source_len : inp_len,
+                                                                 max_len: inp_max_len})
+        if step % 1 == 0:
+            #print(outputs.shape)
+            print("ind", ind)
+            
+            #print("seq_loss", s_l)
+            #print("kl_loss", k_l)
+            #print("loss", los)
 
 
-    print(outputs.shape)
-    print("ind", ind)
-    print("seq_loss", s_l)
-    print("kl_loss", k_l)
-    print("loss", los)
-
-
-    for sent in ind:
-        print(' '.join([id2word[id] for id in sent]))
+            for sent in ind:
+                print(' '.join([id2word[id] for id in sent]))
