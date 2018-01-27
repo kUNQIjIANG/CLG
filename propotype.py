@@ -40,9 +40,10 @@ else:
     id2word[1] = "<Eos>"
     id2word[2] = "<Unk>"
     word_embeddings = np.zeros([vocab_size, embed_size])
-    Sos = np.zeros([1,embed_size])
-    Eos = np.ones([1,embed_size])
-    Unk = np.zeros([1,embed_size])
+    #Sos = np.zeros([1,embed_size])
+    #Eos = np.ones([1,embed_size])
+    #Unk = np.zeros([1,embed_size])
+
     for word in vocab:
         word_embeddings[word2id[word]] = word2vec[word]
 
@@ -91,10 +92,16 @@ u = tf.layers.dense(encoder_state.h,latent_size,tf.nn.sigmoid)
 s = tf.layers.dense(encoder_state.h,latent_size,tf.nn.tanh)
 
 z = u + s * tf.truncated_normal(tf.shape(u),1,-1)
-z = tf.contrib.rnn.LSTMStateTuple(z,z)
+dec_ini_state = tf.contrib.rnn.LSTMStateTuple(z,z)
 
 
+z_list = []
+for i in range(batch_size):
+    b_z = tf.tile([z[i]],[max_len+1,1])
+    z_list.append(b_z)
 
+z_concat = tf.stack(z_list)
+dec_input = tf.concat((dec_embed, z_concat),axis = 2)
 """
 attention_states = tf.Variable(tf.random_uniform([1,10,hid_units],1,-1))
 """
@@ -104,14 +111,15 @@ attention_mechanism = tf.contrib.seq2seq.LuongAttention(hid_units,
                                                         memory_sequence_length = source_len) # len of attention_states = source_seq_len
 
 decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units)
-
+"""
 decoder_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism,
-												   initial_cell_state = z,
+												   initial_cell_state = dec_ini_state,
                                                    attention_layer_size = hid_units)
+"""
 # sequence_length is the decoder sequence lengh
 # could be less than decoder input lengh but not more than decoder input lengh
 #[10, 11, 10, 10, 10]
-helper = tf.contrib.seq2seq.TrainingHelper(inputs = dec_embed,sequence_length = dec_seq_len) 
+helper = tf.contrib.seq2seq.TrainingHelper(inputs = dec_input,sequence_length = dec_seq_len) 
                                            
 greedyHelper = tf.contrib.seq2seq.GreedyEmbeddingHelper(word_embeddings,tf.fill([batch_size],tgt_sos_id),tgt_eos_id)
 
@@ -199,15 +207,16 @@ with tf.Session() as sess:
         #print("dec_inp",dec_inp)
         #print("dec_out",dec_outp)
         
-        ind, outputs, _ = sess.run([hightest_indice, logits, train_step],
+        ind, l, outputs, _, z_c, d_i = sess.run([hightest_indice, loss, logits, train_step, z_concat, dec_input],
                                                     feed_dict = {enc_sent : enc_inp,
                                                                  dec_sent : dec_inp,
                                                                  tar_sent : dec_outp,
                                                                  source_len : inp_len,
                                                                  max_len: inp_max_len})
         if step % 1 == 0:
+            print(l)
             #print(outputs.shape)
-            print("ind", ind)
+            #print("ind", ind)
             
             #print("seq_loss", s_l)
             #print("kl_loss", k_l)
