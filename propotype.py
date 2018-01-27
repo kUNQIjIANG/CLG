@@ -11,7 +11,7 @@ from tensorflow.python.layers.core import Dense
 #decoder_emb_inp = tf.get_variable("decoder_inp",[1,5,10],initializer = initializer)
 tgt_sos_id = 0
 tgt_eos_id = 1
-batch_size = 5
+batch_size = 50
 
 
 if os.path.isfile("word_embeddings.pickle"):
@@ -58,15 +58,15 @@ print("load word embedding done")
 
 embed_size = 50
 max_len = tf.placeholder(tf.int32, shape = [])
-enc_sent = tf.placeholder(tf.int32, shape = [None, 10])
-dec_sent = tf.placeholder(tf.int32, shape = [None, 10+1])
-tar_sent = tf.placeholder(tf.int32, shape = [None, 10+1])
+enc_sent = tf.placeholder(tf.int32, shape = [None, None])
+dec_sent = tf.placeholder(tf.int32, shape = [None, None])
+tar_sent = tf.placeholder(tf.int32, shape = [None, None])
 source_len = tf.placeholder(tf.int32, shape = [None])
 
 dec_seq_len = source_len + 1
 
 
-hid_units = 5
+hid_units = 50
 
 initializer = tf.random_uniform_initializer(-0.1, 0.1)
 
@@ -86,9 +86,9 @@ encoder_output, encoder_state = tf.nn.dynamic_rnn(encoder_cell, enc_embed, dtype
 
 
 
-latent_size = 5
-u = tf.layers.dense(encoder_state.h,5,tf.nn.sigmoid)
-s = tf.layers.dense(encoder_state.h,5,tf.nn.tanh)
+latent_size = 50
+u = tf.layers.dense(encoder_state.h,latent_size,tf.nn.sigmoid)
+s = tf.layers.dense(encoder_state.h,latent_size,tf.nn.tanh)
 
 z = u + s * tf.truncated_normal(tf.shape(u),1,-1)
 z = tf.contrib.rnn.LSTMStateTuple(z,z)
@@ -132,10 +132,10 @@ hightest_indice = outputs.sample_id
 seq_mask = tf.cast(tf.sequence_mask(dec_seq_len,max_len+1),tf.float32)
 #for_con = tf.zeros([5,1,12144])
 #logits = tf.concat([logits,for_con],axis = 1)
-logits = tf.reshape(logits,[5,11,12144])
-target = tf.reshape(tar_sent,[5,11])
-seq_loss = tf.contrib.seq2seq.sequence_loss(logits, target, seq_mask,average_across_timesteps = False,average_across_batch = True)
-kl_loss = 0.5 * tf.reduce_sum(tf.exp(s) + tf.square(u) - 1 - s)
+#logits = tf.reshape(logits,[5,11,12144])
+#target = tf.reshape(tar_sent,[5,11])
+seq_loss = tf.contrib.seq2seq.sequence_loss(logits, tar_sent, seq_mask,average_across_timesteps = False,average_across_batch = True)
+kl_loss = 0.5 * (tf.reduce_sum(tf.square(s) + tf.square(u) - tf.log(tf.square(s))) - latent_size)
 loss = tf.reduce_sum(seq_loss + kl_loss)
 
 #train_step = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(loss)
@@ -164,21 +164,22 @@ with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
 
     joke_data = open("shorterjokes.txt",'r').read().split('\n')
-    generator = next_batch(joke_data,5)
+    generator = next_batch(joke_data,batch_size)
 
-    batch_size = 5
+    batch_size = 50
     inp_max_len = 10
     #fall = [4,17,26,28,30,34,36,38,55,59,65,72,77]
-    f = [4,17]
+    
     for step,jokes in enumerate(generator):
-        if step in f:
-            continue
         inp_len = []
+        for joke in jokes:
+            inp_len.append(len(joke.split()))
+        inp_max_len = max(inp_len)
+        
         enc_inp = np.ones([batch_size,inp_max_len])
         for i,joke in enumerate(jokes):
             joke_word = joke.split()
             leng = len(joke_word)
-            inp_len.append(leng)
             joke_w_id = []
             for word in joke_word:
                 if word.lower() in vocab:
@@ -192,11 +193,11 @@ with tf.Session() as sess:
         eos_pad = np.ones([batch_size,1])
         dec_outp = np.concatenate((enc_inp,eos_pad), axis = 1)
         dec_inp = np.concatenate((sos_pad,enc_inp), axis = 1)
-        print("step",step)
-        print("input len", inp_len)
-        print("enc_inp", enc_inp)
-        print("dec_inp",dec_inp)
-        print("dec_out",dec_outp)
+        #print("step",step)
+        #print("input len", inp_len)
+        #print("enc_inp", enc_inp)
+        #print("dec_inp",dec_inp)
+        #print("dec_out",dec_outp)
         
         ind, outputs, _ = sess.run([hightest_indice, logits, train_step],
                                                     feed_dict = {enc_sent : enc_inp,
