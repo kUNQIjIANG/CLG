@@ -168,7 +168,16 @@ def next_batch(data, batch_size):
         yield data[i:i+batch_size]
 
 with tf.Session() as sess:
-    sess.run(tf.global_variables_initializer())
+    saver = tf.train.Saver()
+    model_path = './saved/NML.ckpt'
+    
+    if os.path.isdir('saved'):
+        print("Loading previous trained model ...")
+        saver.restore(sess, model_path)
+    else:
+        sess.run(tf.global_variables_initializer())
+        print("global initialing")
+    
 
     joke_data = open("shorterjokes.txt",'r').read().split('\n')
     vocab.append("what's")
@@ -228,7 +237,6 @@ with tf.Session() as sess:
                     print("tra: " + ' '.join([id2word[id] for id in tra]))
                     print("inf: " + ' '.join([id2word[id] for id in inf]))
     
-    saver = tf.train.Saver()
-    model_path = './saved/NML.ckpt'
+    
     save_path = saver.save(sess, model_path)
     print("Model saved in file: %s" % save_path)
