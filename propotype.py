@@ -5,6 +5,7 @@ import gensim
 import pickle
 import os
 import random
+from nltk.tokenize import RegexpTokenizer
 from tensorflow.python.layers.core import Dense
 from tensorflow.contrib.seq2seq.python.ops import beam_search_decoder
 
@@ -13,9 +14,10 @@ from tensorflow.contrib.seq2seq.python.ops import beam_search_decoder
 #decoder_emb_inp = tf.get_variable("decoder_inp",[1,5,10],initializer = initializer)
 sos_id = 0
 eos_id = 1
-batch_size = 50
+batch_size = 32
 beam_width = 5
 
+tokenizer = RegexpTokenizer(r'\w+')
 
 if os.path.isfile("word_embeddings.pickle"):
     word_embeddings = pickle.load(open('word_embeddings.pickle','rb'))
@@ -28,7 +30,7 @@ else:
     word2vec = gensim.models.KeyedVectors.load_word2vec_format('glove.50d.txt', binary=False)
     vocab = []
     for joke in open("shorterjokes.txt").read().split("\n"):
-        for word in joke.split():
+        for word in tokenizer.tokenize(joke):
             if word.lower() in word2vec.wv.vocab and word.lower() not in vocab:
                 vocab.append(word.lower())
     print(len(vocab))
@@ -68,7 +70,7 @@ enc_sent = tf.placeholder(tf.int32, shape = [None, None])
 dec_sent = tf.placeholder(tf.int32, shape = [None, None])
 tar_sent = tf.placeholder(tf.int32, shape = [None, None])
 source_len = tf.placeholder(tf.int32, shape = [None])
-#batch_size = tf.placeholder(tf.int32, shape = [])
+schedule_kl_weight = tf.placeholder(tf.float32, shape = [])
 
 dec_seq_len = source_len + 1
 dec_max_len = max_len + 1
@@ -189,7 +191,7 @@ seq_loss = tf.contrib.seq2seq.sequence_loss(train_logits, tar_sent, seq_mask,ave
 kl_loss = 0.5 * (tf.reduce_sum(tf.square(s) + tf.square(u) - tf.log(tf.square(s))) - latent_size)
 #loss = tf.reduce_sum(seq_loss + 0.1 * kl_loss)
 #loss = kl_loss 
-train_loss = seq_loss + kl_loss
+train_loss = seq_loss + schedule_kl_weight * kl_loss
 
 
 optimizer = tf.train.AdamOptimizer(1e-3)
@@ -207,8 +209,9 @@ def next_batch(data, batch_size):
 with tf.Session() as sess:
     saver = tf.train.Saver()
     model_path = './saved_beam/NML.ckpt'
+    model_dir = 'saved_beam'
 
-    if os.path.isfile(model_path):
+    if os.path.isdir(model_dir):
         print("Loading previous trained model ...")
         saver.restore(sess, model_path)
     else:
@@ -219,24 +222,25 @@ with tf.Session() as sess:
     joke_data = open("shorterjokes.txt",'r').read().split('\n')
     vocab.append("what's")
     epochs = 5
+
     for epoch in range(epochs):
         random.shuffle(joke_data)
         generator = next_batch(joke_data,batch_size)
+        total_schedule = epochs * int(len(joke_data) / batch_size)
         
         for step,jokes in enumerate(generator):
             inp_len = []
             batch_rec = []
+            schedule =  epoch/epochs + step/total_schedule
             for joke in jokes:
-                word_in_voc = [word for word in joke.split() if word in vocab]
-                if len(word_in_voc) == 0:
-                    word_in_voc = ["I","am","here"]
-                inp_len.append(len(word_in_voc))
+                joke_words = tokenizer.tokenize(joke)
+                inp_len.append(len(joke_words))
                 joke_w_id = []
-                for word in word_in_voc:
-                    if word.lower() == "what's":
-                        joke_w_id.append(word2id["what"])
-                    else:
+                for word in joke_words:
+                    if word.lower() in vocab:
                         joke_w_id.append(word2id[word.lower()])
+                    else:
+                        joke_w_id.append(word2id["<Unk>"])
                 batch_rec.append(joke_w_id)
 
             inp_max_len = max(inp_len)
@@ -254,13 +258,13 @@ with tf.Session() as sess:
             for i, leng in enumerate(inp_len):
                 dec_outp[i,leng] = word2id["<Eos>"]
             
-            
             t_ind, i_ind, t_loss,  _ = sess.run([train_ind, infer_ind, train_loss, train_step],
                                                         feed_dict = {enc_sent : enc_inp,
                                                                      dec_sent : dec_inp,
                                                                      tar_sent : dec_outp,
                                                                      source_len : inp_len,
-                                                                     max_len: inp_max_len})
+                                                                     max_len : inp_max_len,
+                                                                     schedule_kl_weight : schedule})
             if step % 50 == 0:
                 
                 for tra, inf, truth in zip(t_ind, i_ind, dec_outp):
