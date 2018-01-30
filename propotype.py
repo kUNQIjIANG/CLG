@@ -86,20 +86,31 @@ dec_embed = tf.nn.embedding_lookup(word_embeddings, dec_sent)
 enc_embed = tf.nn.embedding_lookup(word_embeddings, enc_sent)
 
 # encoder
-shit_state = tf.contrib.rnn.LSTMStateTuple(tf.Variable(tf.random_normal([1,hid_units], mean=-1, stddev=4)),
-                 						   tf.Variable(tf.random_normal([1,hid_units], mean=-1, stddev=4)))
-
 encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units)
 encoder_output, encoder_final_state = tf.nn.dynamic_rnn(encoder_cell, enc_embed, dtype = tf.float32,sequence_length = source_len)
 
 
+
 latent_size = 50
-u = tf.layers.dense(encoder_final_state.c,latent_size,tf.nn.sigmoid)
-s = tf.layers.dense(encoder_final_state.c,latent_size,tf.nn.tanh)
+
+u = tf.layers.dense(encoder_final_state.c,latent_size,tf.nn.sigmoid,name = "state_latent_u")
+s = tf.layers.dense(encoder_final_state.c,latent_size,tf.nn.sigmoid,name = "state_latent_s")
 
 z = u + s * tf.truncated_normal(tf.shape(u),1,-1)
 dec_ini_state = tf.contrib.rnn.LSTMStateTuple(z,z)
 
+
+vari_enc_outputs = encoder_output 
+
+"""
+vari_enc_outputs = tf.zeros(tf.shape(encoder_output))
+for i in range(batch_size):
+    for j in range(2):
+        u_output = tf.layers.dense(encoder_output[i,j,:],latent_size,tf.nn.sigmoid,name = "output_var_u")
+        s_output = tf.layers.dense(encoder_output[i,j,:],latent_size,tf.nn.relu, name = "output_var_s")
+        z_output = u_output + s_output * tf.truncated_normal(tf.shape(u_output),1,-1)
+        vari_enc_outputs[i,j,:] = z_output
+"""
 """
 z_list = []
 for i in range(batch_size):
@@ -114,34 +125,78 @@ dec_input = dec_embed
 # training and inference share this decoder cell
 decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units)
 
-train_attention_states = encoder_output
-train_attention_mechanism = tf.contrib.seq2seq.LuongAttention(hid_units,
-                                                        train_attention_states,
-                                                        memory_sequence_length = source_len) # len of attention_states = source_seq_len
 
-train_atten_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, train_attention_mechanism,
-												   initial_cell_state = dec_ini_state,
-                                                   attention_layer_size = hid_units)
+with tf.name_scope("Training"):
+    train_attention_states = vari_enc_outputs
+    train_attention_mechanism = tf.contrib.seq2seq.LuongAttention(hid_units,
+                                                                  train_attention_states,
+                                                                  memory_sequence_length = source_len) # len of attention_states = source_seq_len
 
-# sequence_length is the decoder sequence lengh
-# could be less than decoder input lengh but not more than decoder input lengh
+    train_atten_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, train_attention_mechanism,
+    												   initial_cell_state = dec_ini_state,
+                                                       attention_layer_size = hid_units)
 
-train_helper = tf.contrib.seq2seq.TrainingHelper(inputs = dec_input,sequence_length = dec_seq_len) 
-                                           
-greedyHelper = tf.contrib.seq2seq.GreedyEmbeddingHelper(word_embeddings,tf.fill([batch_size],sos_id),eos_id)
+    # sequence_length is the decoder sequence lengh
+    # could be less than decoder input lengh but not more than decoder input lengh
 
+    train_helper = tf.contrib.seq2seq.TrainingHelper(inputs = dec_input,sequence_length = dec_seq_len) 
+                                               
 
-#tf.nn.rnn_cell.BasicLSTMCell(hid_units)
+    # Since using attention cell, have to use this zero_state which is state.c for 
+    # attention operation rather than a LSTMTuple(c,h)
+    initial_state = train_atten_cell.zero_state(dtype=tf.float32, batch_size = batch_size)
 
-#initial_state = decoder_cell.zero_state(dtype=tf.float32, batch_size = batch_size)
-initial_state = dec_ini_state
-train_decoder = tf.contrib.seq2seq.BasicDecoder(train_atten_cell, train_helper,
-                                          initial_state = initial_state,
-                                          output_layer = Dense(vocab_size))
-"""
-infer_decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell, greedyHelper,
-                                          initial_state = initial_state,
-                                          output_layer = Dense(vocab_size))
+    #initial_state = dec_ini_state
+    train_decoder = tf.contrib.seq2seq.BasicDecoder(train_atten_cell, train_helper,
+                                              initial_state = initial_state,
+                                              output_layer = Dense(vocab_size))
+
+    train_outputs, t_final_context_state, _ = tf.contrib.seq2seq.dynamic_decode(train_decoder,maximum_iterations = None)
+
+with tf.name_scope("Inference"):
+
+    beam_width = 5
+    tiled_encoder_outputs = tf.contrib.seq2seq.tile_batch(
+        vari_enc_outputs, multiplier=beam_width)
+
+    tiled_encoder_final_state = tf.contrib.seq2seq.tile_batch(
+        dec_ini_state, multiplier=beam_width)
+
+    tiled_source_len = tf.contrib.seq2seq.tile_batch(
+        source_len, multiplier=beam_width)
+
+    attention_mechanism = tf.contrib.seq2seq.LuongAttention(
+        num_units=hid_units,
+        memory=tiled_encoder_outputs,
+        memory_sequence_length=tiled_source_len)
+
+    beam_decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units)
+
+    attention_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism,
+                                                         attention_layer_size = hid_units)
+
+    decoder_initial_state = attention_cell.zero_state(dtype=tf.float32, batch_size= batch_size * beam_width)
+    decoder_initial_state = decoder_initial_state.clone(cell_state=tiled_encoder_final_state)
+
+    #tf.contrib.seq2seq.tile_batch(initial_state, beam_width),
+    beam_decoder = beam_search_decoder.BeamSearchDecoder(cell=attention_cell,
+                                                         embedding=word_embeddings,
+                                                         start_tokens=tf.fill([batch_size],sos_id),
+                                                         end_token=sos_id,
+                                                         initial_state= decoder_initial_state,
+                                                         beam_width=beam_width,
+                                                         output_layer=Dense(vocab_size))
+
+    
+    greedyHelper = tf.contrib.seq2seq.GreedyEmbeddingHelper(word_embeddings,tf.fill([batch_size],sos_id),eos_id)
+
+    infer_decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell, greedyHelper,
+                                              initial_state = dec_ini_state,
+                                              output_layer = Dense(vocab_size))
+    
+    infer_outputs, i_final_context_state, _ = tf.contrib.seq2seq.dynamic_decode(beam_decoder,maximum_iterations = dec_max_len)
+
+#beam
 """
 beam_width = 5
 tiled_encoder_outputs = tf.contrib.seq2seq.tile_batch(
@@ -158,7 +213,9 @@ attention_mechanism = tf.contrib.seq2seq.LuongAttention(
     memory=tiled_encoder_outputs,
     memory_sequence_length=tiled_source_len)
 
-attention_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism,
+beam_decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units)
+
+attention_cell = tf.contrib.seq2seq.AttentionWrapper(beam_decoder_cell, attention_mechanism,
                                                      attention_layer_size = hid_units)
 
 decoder_initial_state = attention_cell.zero_state(dtype=tf.float32, batch_size= batch_size * beam_width)
@@ -172,13 +229,12 @@ beam_decoder = beam_search_decoder.BeamSearchDecoder(cell=attention_cell,
                                                      initial_state= decoder_initial_state,
                                                      beam_width=beam_width,
                                                      output_layer=Dense(vocab_size))
-
-train_outputs, t_final_context_state, _ = tf.contrib.seq2seq.dynamic_decode(train_decoder,maximum_iterations = None)
-
-infer_outputs, i_final_context_state, _ = tf.contrib.seq2seq.dynamic_decode(beam_decoder,maximum_iterations = dec_max_len)
+"""
 
 train_ind = train_outputs.sample_id
 infer_ind = infer_outputs.predicted_ids[:,:,0]
+#infer_ind = infer_outputs.sample_id
+
 
 train_logits = train_outputs.rnn_output
 
@@ -229,6 +285,8 @@ with tf.Session() as sess:
             schedule =  epoch/epochs + step/total_schedule
             for joke in jokes:
                 joke_words = word_tokenize(joke)
+                if len(joke_words) <= 0:
+                    joke_words = ["The joke is empty, let me make one here..."]
                 inp_len.append(len(joke_words))
                 joke_w_id = []
                 for word in joke_words:
@@ -252,8 +310,9 @@ with tf.Session() as sess:
             dec_inp = np.concatenate((sos_pad,enc_inp), axis = 1)
             for i, leng in enumerate(inp_len):
                 dec_outp[i,leng] = word2id["<Eos>"]
-            
-            t_ind, i_ind, t_loss,  _ = sess.run([train_ind, infer_ind, train_loss, train_step],
+            #i_ind, infer_ind,
+            # t_ind,  t_loss,  _, train_ind,  train_loss, train_step
+            t_ind, i_ind,  t_loss,  _ = sess.run([train_ind, infer_ind, train_loss, train_step],
                                                         feed_dict = {enc_sent : enc_inp,
                                                                      dec_sent : dec_inp,
                                                                      tar_sent : dec_outp,
@@ -261,12 +320,14 @@ with tf.Session() as sess:
                                                                      max_len : inp_max_len,
                                                                      schedule_kl_weight : schedule})
             if step % 50 == 0:
-                
-                for tra, inf, truth in zip(t_ind, i_ind, dec_outp):
+                # inf, i_ind,
+                # tra, t_ind,
+                for tra, inf,  truth in zip(t_ind, i_ind, dec_outp):
                     print("truth: " + ' '.join([id2word[id] for id in truth]))
                     print("tra: " + ' '.join([id2word[id] for id in tra]))
                     print("inf: " + ' '.join([id2word[id] for id in inf]))
-    
-    
+            
+        
+
     save_path = saver.save(sess, model_path)
     print("Model saved in file: %s" % save_path)
