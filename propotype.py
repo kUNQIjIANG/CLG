@@ -5,7 +5,7 @@ import gensim
 import pickle
 import os
 import random
-from nltk.tokenize import RegexpTokenizer
+from nltk import word_tokenize
 from tensorflow.python.layers.core import Dense
 from tensorflow.contrib.seq2seq.python.ops import beam_search_decoder
 
@@ -17,7 +17,7 @@ eos_id = 1
 batch_size = 32
 beam_width = 5
 
-tokenizer = RegexpTokenizer(r'\w+')
+
 
 if os.path.isfile("word_embeddings.pickle"):
     word_embeddings = pickle.load(open('word_embeddings.pickle','rb'))
@@ -30,7 +30,7 @@ else:
     word2vec = gensim.models.KeyedVectors.load_word2vec_format('glove.50d.txt', binary=False)
     vocab = []
     for joke in open("shorterjokes.txt").read().split("\n"):
-        for word in tokenizer.tokenize(joke):
+        for word in word_tokenize(joke):
             if word.lower() in word2vec.wv.vocab and word.lower() not in vocab:
                 vocab.append(word.lower())
     print(len(vocab))
@@ -233,7 +233,7 @@ with tf.Session() as sess:
             batch_rec = []
             schedule =  epoch/epochs + step/total_schedule
             for joke in jokes:
-                joke_words = tokenizer.tokenize(joke)
+                joke_words = word_tokenize(joke)
                 inp_len.append(len(joke_words))
                 joke_w_id = []
                 for word in joke_words:
