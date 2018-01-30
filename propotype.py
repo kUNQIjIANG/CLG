@@ -93,8 +93,6 @@ encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units)
 encoder_output, encoder_final_state = tf.nn.dynamic_rnn(encoder_cell, enc_embed, dtype = tf.float32,sequence_length = source_len)
 
 
-
-
 latent_size = 50
 u = tf.layers.dense(encoder_final_state.c,latent_size,tf.nn.sigmoid)
 s = tf.layers.dense(encoder_final_state.c,latent_size,tf.nn.tanh)
@@ -113,7 +111,39 @@ dec_input = tf.concat((dec_embed, z_concat),axis = 2)
 """
 dec_input = dec_embed
 
+# training and inference share this decoder cell
+decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units)
 
+train_attention_states = encoder_output
+train_attention_mechanism = tf.contrib.seq2seq.LuongAttention(hid_units,
+                                                        train_attention_states,
+                                                        memory_sequence_length = source_len) # len of attention_states = source_seq_len
+
+train_atten_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, train_attention_mechanism,
+												   initial_cell_state = dec_ini_state,
+                                                   attention_layer_size = hid_units)
+
+# sequence_length is the decoder sequence lengh
+# could be less than decoder input lengh but not more than decoder input lengh
+
+train_helper = tf.contrib.seq2seq.TrainingHelper(inputs = dec_input,sequence_length = dec_seq_len) 
+                                           
+greedyHelper = tf.contrib.seq2seq.GreedyEmbeddingHelper(word_embeddings,tf.fill([batch_size],sos_id),eos_id)
+
+
+#tf.nn.rnn_cell.BasicLSTMCell(hid_units)
+
+#initial_state = decoder_cell.zero_state(dtype=tf.float32, batch_size = batch_size)
+initial_state = dec_ini_state
+train_decoder = tf.contrib.seq2seq.BasicDecoder(train_atten_cell, train_helper,
+                                          initial_state = initial_state,
+                                          output_layer = Dense(vocab_size))
+"""
+infer_decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell, greedyHelper,
+                                          initial_state = initial_state,
+                                          output_layer = Dense(vocab_size))
+"""
+beam_width = 5
 tiled_encoder_outputs = tf.contrib.seq2seq.tile_batch(
     encoder_output, multiplier=beam_width)
 
@@ -128,51 +158,18 @@ attention_mechanism = tf.contrib.seq2seq.LuongAttention(
     memory=tiled_encoder_outputs,
     memory_sequence_length=tiled_source_len)
 
-decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units)
-
 attention_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism,
-                                  #initial_cell_state = tiled_encoder_final_state,
-                                  attention_layer_size = hid_units)
+                                                     attention_layer_size = hid_units)
 
 decoder_initial_state = attention_cell.zero_state(dtype=tf.float32, batch_size= batch_size * beam_width)
 decoder_initial_state = decoder_initial_state.clone(cell_state=tiled_encoder_final_state)
 
-"""
-attention_states = encoder_output
-attention_mechanism = tf.contrib.seq2seq.LuongAttention(hid_units,
-                                                        attention_states,
-                                                        memory_sequence_length = source_len) # len of attention_states = source_seq_len
-
-# training and inference share this decoder cell
-decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units)
-
-decoder_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism,
-												   initial_cell_state = dec_ini_state,
-                                                   attention_layer_size = hid_units)
-"""
-# sequence_length is the decoder sequence lengh
-# could be less than decoder input lengh but not more than decoder input lengh
-
-train_helper = tf.contrib.seq2seq.TrainingHelper(inputs = dec_input,sequence_length = dec_seq_len) 
-                                           
-greedyHelper = tf.contrib.seq2seq.GreedyEmbeddingHelper(word_embeddings,tf.fill([batch_size],sos_id),eos_id)
-
-#initial_state = decoder_cell.zero_state(dtype=tf.float32, batch_size = batch_size)
-initial_state = dec_ini_state
-train_decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell, train_helper,
-                                          initial_state = initial_state,
-                                          output_layer = Dense(vocab_size))
-
-infer_decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell, greedyHelper,
-                                          initial_state = initial_state,
-                                          output_layer = Dense(vocab_size))
-beam_width = 5
 #tf.contrib.seq2seq.tile_batch(initial_state, beam_width),
-beam_decoder = beam_search_decoder.BeamSearchDecoder(cell=decoder_cell,
+beam_decoder = beam_search_decoder.BeamSearchDecoder(cell=attention_cell,
                                                      embedding=word_embeddings,
                                                      start_tokens=tf.fill([batch_size],sos_id),
                                                      end_token=sos_id,
-                                                     initial_state=tf.contrib.seq2seq.tile_batch(initial_state, beam_width),
+                                                     initial_state= decoder_initial_state,
                                                      beam_width=beam_width,
                                                      output_layer=Dense(vocab_size))
 
@@ -189,8 +186,6 @@ seq_mask = tf.cast(tf.sequence_mask(dec_seq_len,dec_max_len),tf.float32)
 
 seq_loss = tf.contrib.seq2seq.sequence_loss(train_logits, tar_sent, seq_mask,average_across_timesteps = False,average_across_batch = True)
 kl_loss = 0.5 * (tf.reduce_sum(tf.square(s) + tf.square(u) - tf.log(tf.square(s))) - latent_size)
-#loss = tf.reduce_sum(seq_loss + 0.1 * kl_loss)
-#loss = kl_loss 
 train_loss = seq_loss + schedule_kl_weight * kl_loss
 
 
