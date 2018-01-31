@@ -196,47 +196,10 @@ with tf.name_scope("Inference"):
     
     infer_outputs, i_final_context_state, _ = tf.contrib.seq2seq.dynamic_decode(beam_decoder,maximum_iterations = dec_max_len)
 
-#beam
-"""
-beam_width = 5
-tiled_encoder_outputs = tf.contrib.seq2seq.tile_batch(
-    encoder_output, multiplier=beam_width)
-
-tiled_encoder_final_state = tf.contrib.seq2seq.tile_batch(
-    dec_ini_state, multiplier=beam_width)
-
-tiled_source_len = tf.contrib.seq2seq.tile_batch(
-    source_len, multiplier=beam_width)
-
-attention_mechanism = tf.contrib.seq2seq.LuongAttention(
-    num_units=hid_units,
-    memory=tiled_encoder_outputs,
-    memory_sequence_length=tiled_source_len)
-
-beam_decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units)
-
-attention_cell = tf.contrib.seq2seq.AttentionWrapper(beam_decoder_cell, attention_mechanism,
-                                                     attention_layer_size = hid_units)
-
-decoder_initial_state = attention_cell.zero_state(dtype=tf.float32, batch_size= batch_size * beam_width)
-decoder_initial_state = decoder_initial_state.clone(cell_state=tiled_encoder_final_state)
-
-#tf.contrib.seq2seq.tile_batch(initial_state, beam_width),
-beam_decoder = beam_search_decoder.BeamSearchDecoder(cell=attention_cell,
-                                                     embedding=word_embeddings,
-                                                     start_tokens=tf.fill([batch_size],sos_id),
-                                                     end_token=sos_id,
-                                                     initial_state= decoder_initial_state,
-                                                     beam_width=beam_width,
-                                                     output_layer=Dense(vocab_size))
-"""
-
+train_logits = train_outputs.rnn_output
 train_ind = train_outputs.sample_id
 infer_ind = infer_outputs.predicted_ids[:,:,0]
 #infer_ind = infer_outputs.sample_id
-
-
-train_logits = train_outputs.rnn_output
 
 seq_mask = tf.cast(tf.sequence_mask(dec_seq_len,dec_max_len),tf.float32)
 
@@ -269,10 +232,9 @@ with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         print("global initialing")
     
-
     joke_data = open("shorterjokes.txt",'r').read().split('\n')
     vocab.append("what's")
-    epochs = 5
+    epochs = 1
 
     for epoch in range(epochs):
         random.shuffle(joke_data)
@@ -286,7 +248,7 @@ with tf.Session() as sess:
             for joke in jokes:
                 joke_words = word_tokenize(joke)
                 if len(joke_words) <= 0:
-                    joke_words = ["The joke is empty, let me make one here..."]
+                    joke_words = ["This joke is empty, let me make one here..."]
                 inp_len.append(len(joke_words))
                 joke_w_id = []
                 for word in joke_words:
@@ -300,8 +262,7 @@ with tf.Session() as sess:
 
             enc_inp = 3 * np.ones([batch_size,inp_max_len])
             for i, (w_id,leng) in enumerate(zip(batch_rec, inp_len)):
-                #print("w_id", w_id)
-                #print("len", leng)
+                
                 enc_inp[i,:leng] = w_id
                 
             sos_pad = np.zeros([batch_size,1])
@@ -310,24 +271,36 @@ with tf.Session() as sess:
             dec_inp = np.concatenate((sos_pad,enc_inp), axis = 1)
             for i, leng in enumerate(inp_len):
                 dec_outp[i,leng] = word2id["<Eos>"]
-            #i_ind, infer_ind,
-            # t_ind,  t_loss,  _, train_ind,  train_loss, train_step
-            t_ind, i_ind,  t_loss,  _ = sess.run([train_ind, infer_ind, train_loss, train_step],
-                                                        feed_dict = {enc_sent : enc_inp,
-                                                                     dec_sent : dec_inp,
-                                                                     tar_sent : dec_outp,
-                                                                     source_len : inp_len,
-                                                                     max_len : inp_max_len,
-                                                                     schedule_kl_weight : schedule})
+            
+            # trianing graph
+            t_ind, t_loss,  _ = sess.run([train_ind, train_loss, train_step],
+                                                    feed_dict = {enc_sent : enc_inp,
+                                                                 dec_sent : dec_inp,
+                                                                 tar_sent : dec_outp,
+                                                                 source_len : inp_len,
+                                                                 max_len : inp_max_len,
+                                                                 schedule_kl_weight : schedule})
             if step % 50 == 0:
-                # inf, i_ind,
-                # tra, t_ind,
-                for tra, inf,  truth in zip(t_ind, i_ind, dec_outp):
+                
+                for tra, truth in zip(t_ind, dec_outp):
                     print("truth: " + ' '.join([id2word[id] for id in truth]))
                     print("tra: " + ' '.join([id2word[id] for id in tra]))
-                    print("inf: " + ' '.join([id2word[id] for id in inf]))
             
-        
+            """
+            # inference graph
+            i_ind = sess.run(infer_ind,feed_dict = {enc_sent : enc_inp,
+                                                      dec_sent : dec_inp,
+                                                      tar_sent : dec_outp,
+                                                      source_len : inp_len,
+                                                      max_len : inp_max_len,
+                                                      schedule_kl_weight : schedule})
+            if step % 5 == 0:
+                
+                for inf, truth in zip(i_ind, dec_outp):
+                    print("truth: " + ' '.join([id2word[id] for id in truth]))
+                    print("inf: " + ' '.join([id2word[id] for id in inf]))                      
+            
+            """
 
     save_path = saver.save(sess, model_path)
     print("Model saved in file: %s" % save_path)
