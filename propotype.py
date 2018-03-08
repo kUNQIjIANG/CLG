@@ -64,43 +64,6 @@ else:
     print("construct word embedding done")
 
 
-embed_size = 50
-max_len = tf.placeholder(tf.int32, shape = [])
-enc_sent = tf.placeholder(tf.int32, shape = [None, None])
-dec_sent = tf.placeholder(tf.int32, shape = [None, None])
-tar_sent = tf.placeholder(tf.int32, shape = [None, None])
-source_len = tf.placeholder(tf.int32, shape = [None])
-schedule_kl_weight = tf.placeholder(tf.float32, shape = [])
-
-dec_seq_len = source_len + 1
-dec_max_len = max_len + 1
-
-hid_units = 50
-
-initializer = tf.random_uniform_initializer(-0.1, 0.1)
-
-word_embeddings = tf.cast(word_embeddings,tf.float32)
-#tf.Variable(tf.random_uniform([vocab_size,embed_size],1,-1))
-
-dec_embed = tf.nn.embedding_lookup(word_embeddings, dec_sent)
-enc_embed = tf.nn.embedding_lookup(word_embeddings, enc_sent)
-
-# encoder
-encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units)
-encoder_output, encoder_final_state = tf.nn.dynamic_rnn(encoder_cell, enc_embed, dtype = tf.float32,sequence_length = source_len)
-
-
-
-latent_size = 50
-
-u = tf.layers.dense(encoder_final_state.c,latent_size,tf.nn.sigmoid,name = "state_latent_u")
-s = tf.layers.dense(encoder_final_state.c,latent_size,tf.nn.sigmoid,name = "state_latent_s")
-
-z = u + s * tf.truncated_normal(tf.shape(u),1,-1)
-dec_ini_state = tf.contrib.rnn.LSTMStateTuple(z,z)
-
-
-vari_enc_outputs = encoder_output 
 
 """
 vari_enc_outputs = tf.zeros(tf.shape(encoder_output))
@@ -120,17 +83,57 @@ for i in range(batch_size):
 z_concat = tf.stack(z_list)
 dec_input = tf.concat((dec_embed, z_concat),axis = 2)
 """
-dec_input = dec_embed
 
-# training and inference share this decoder cell
-decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units)
+with tf.variable_scope("Training"):
+
+    embed_size = 50
+    max_len = tf.placeholder(tf.int32, shape = [])
+    enc_sent = tf.placeholder(tf.int32, shape = [None, None])
+    dec_sent = tf.placeholder(tf.int32, shape = [None, None])
+    tar_sent = tf.placeholder(tf.int32, shape = [None, None])
+    source_len = tf.placeholder(tf.int32, shape = [None])
+    schedule_kl_weight = tf.placeholder(tf.float32, shape = [])
+
+    dec_seq_len = source_len + 1
+    dec_max_len = max_len + 1
+
+    hid_units = 50
+
+    initializer = tf.random_uniform_initializer(-0.1, 0.1)
+
+    word_embeddings = tf.cast(word_embeddings,tf.float32)
+    #tf.Variable(tf.random_uniform([vocab_size,embed_size],1,-1))
+
+    dec_embed = tf.nn.embedding_lookup(word_embeddings, dec_sent)
+    enc_embed = tf.nn.embedding_lookup(word_embeddings, enc_sent)
+
+    # encoder
+    encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units)
+    # a debug found : encoder output length depends on the max len 
+    # in this batch, source_len will be check, no matter emc_embed length(shape)
+    encoder_output, encoder_final_state = tf.nn.dynamic_rnn(encoder_cell, enc_embed, dtype = tf.float32,sequence_length = source_len)
+
+    latent_size = 50
+
+    u = tf.layers.dense(encoder_final_state.c,latent_size,tf.nn.sigmoid,name = "state_latent_u",reuse = tf.AUTO_REUSE)
+    s = tf.layers.dense(encoder_final_state.c,latent_size,tf.nn.sigmoid,name = "state_latent_s",reuse = tf.AUTO_REUSE)
+
+    z = u + s * tf.truncated_normal(tf.shape(u),1,-1)
+    dec_ini_state = tf.contrib.rnn.LSTMStateTuple(z,z)
+
+    dec_input = dec_embed
+
+    # training and inference share this decoder cell
+    decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units, reuse = tf.AUTO_REUSE)
+
+    vari_enc_outputs = encoder_output 
 
 
-with tf.name_scope("Training"):
     train_attention_states = vari_enc_outputs
     train_attention_mechanism = tf.contrib.seq2seq.LuongAttention(hid_units,
                                                                   train_attention_states,
-                                                                  memory_sequence_length = source_len) # len of attention_states = source_seq_len
+                                                                  memory_sequence_length = source_len,
+                                                                  ) # len of attention_states = source_seq_len
 
     train_atten_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, train_attention_mechanism,
     												   initial_cell_state = dec_ini_state,
@@ -153,7 +156,23 @@ with tf.name_scope("Training"):
 
     train_outputs, t_final_context_state, _ = tf.contrib.seq2seq.dynamic_decode(train_decoder,maximum_iterations = None)
 
-with tf.name_scope("Inference"):
+    seq_mask = tf.cast(tf.sequence_mask(dec_seq_len,dec_max_len),tf.float32)
+
+    train_logits = train_outputs.rnn_output
+    train_ind = train_outputs.sample_id
+
+    seq_loss = tf.contrib.seq2seq.sequence_loss(train_logits, tar_sent, seq_mask,average_across_timesteps = False,average_across_batch = True)
+    kl_loss = 0.5 * (tf.reduce_sum(tf.square(s) + tf.square(u) - tf.log(tf.square(s))) - latent_size)
+    train_loss = seq_loss + schedule_kl_weight * kl_loss
+    
+    optimizer = tf.train.AdamOptimizer(1e-3)
+    gradients, variables = zip(*optimizer.compute_gradients(train_loss))
+    gradients = [
+        None if gradient is None else tf.clip_by_value(gradient,-1.0,1.0)
+        for gradient in gradients]
+    train_step = optimizer.apply_gradients(zip(gradients, variables))
+
+with tf.variable_scope("Training",reuse = True):
 
     beam_width = 5
     tiled_encoder_outputs = tf.contrib.seq2seq.tile_batch(
@@ -169,8 +188,6 @@ with tf.name_scope("Inference"):
         num_units=hid_units,
         memory=tiled_encoder_outputs,
         memory_sequence_length=tiled_source_len)
-
-    beam_decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units)
 
     attention_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism,
                                                          attention_layer_size = hid_units)
@@ -196,25 +213,10 @@ with tf.name_scope("Inference"):
     
     infer_outputs, i_final_context_state, _ = tf.contrib.seq2seq.dynamic_decode(beam_decoder,maximum_iterations = dec_max_len)
 
-train_logits = train_outputs.rnn_output
-train_ind = train_outputs.sample_id
-infer_ind = infer_outputs.predicted_ids[:,:,0]
+
+    infer_ind = infer_outputs.predicted_ids[:,:,0]
+
 #infer_ind = infer_outputs.sample_id
-
-seq_mask = tf.cast(tf.sequence_mask(dec_seq_len,dec_max_len),tf.float32)
-
-seq_loss = tf.contrib.seq2seq.sequence_loss(train_logits, tar_sent, seq_mask,average_across_timesteps = False,average_across_batch = True)
-kl_loss = 0.5 * (tf.reduce_sum(tf.square(s) + tf.square(u) - tf.log(tf.square(s))) - latent_size)
-train_loss = seq_loss + schedule_kl_weight * kl_loss
-
-
-optimizer = tf.train.AdamOptimizer(1e-3)
-gradients, variables = zip(*optimizer.compute_gradients(train_loss))
-gradients = [
-    None if gradient is None else tf.clip_by_value(gradient,-1.0,1.0)
-    for gradient in gradients]
-train_step = optimizer.apply_gradients(zip(gradients, variables))
-
 
 def next_batch(data, batch_size):
     for i in range(0, len(data) - batch_size, batch_size):
@@ -222,8 +224,8 @@ def next_batch(data, batch_size):
 
 with tf.Session() as sess:
     saver = tf.train.Saver()
-    model_path = './saved_beam/NML.ckpt'
-    model_dir = 'saved_beam'
+    model_path = './saved_with_scope/NML.ckpt'
+    model_dir = 'saved_with_scope'
 
     if os.path.isdir(model_dir):
         print("Loading previous trained model ...")
@@ -234,7 +236,7 @@ with tf.Session() as sess:
     
     joke_data = open("shorterjokes.txt",'r').read().split('\n')
     vocab.append("what's")
-    epochs = 1
+    epochs = 3
 
     for epoch in range(epochs):
         random.shuffle(joke_data)
@@ -274,19 +276,19 @@ with tf.Session() as sess:
             
             # trianing graph
             t_ind, t_loss,  _ = sess.run([train_ind, train_loss, train_step],
-                                                    feed_dict = {enc_sent : enc_inp,
-                                                                 dec_sent : dec_inp,
-                                                                 tar_sent : dec_outp,
-                                                                 source_len : inp_len,
-                                                                 max_len : inp_max_len,
-                                                                 schedule_kl_weight : schedule})
+                                                feed_dict = {enc_sent : enc_inp,
+                                                             dec_sent : dec_inp,
+                                                             tar_sent : dec_outp,
+                                                             source_len : inp_len,
+                                                             max_len : inp_max_len,
+                                                             schedule_kl_weight : schedule})
             if step % 50 == 0:
                 
                 for tra, truth in zip(t_ind, dec_outp):
                     print("truth: " + ' '.join([id2word[id] for id in truth]))
                     print("tra: " + ' '.join([id2word[id] for id in tra]))
             
-            """
+            
             # inference graph
             i_ind = sess.run(infer_ind,feed_dict = {enc_sent : enc_inp,
                                                       dec_sent : dec_inp,
@@ -300,7 +302,7 @@ with tf.Session() as sess:
                     print("truth: " + ' '.join([id2word[id] for id in truth]))
                     print("inf: " + ' '.join([id2word[id] for id in inf]))                      
             
-            """
+            
 
     save_path = saver.save(sess, model_path)
     print("Model saved in file: %s" % save_path)
