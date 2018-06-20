@@ -87,15 +87,17 @@ dec_input = tf.concat((dec_embed, z_concat),axis = 2)
 with tf.variable_scope("Training"):
 
     embed_size = 50
-    max_len = tf.placeholder(tf.int32, shape = [])
+    
+    dec_max_len = tf.placeholder(tf.int32, shape = [])
     enc_sent = tf.placeholder(tf.int32, shape = [None, None])
     dec_sent = tf.placeholder(tf.int32, shape = [None, None])
     tar_sent = tf.placeholder(tf.int32, shape = [None, None])
-    source_len = tf.placeholder(tf.int32, shape = [None])
+    enc_len = tf.placeholder(tf.int32, shape = [None])
+    dec_len = tf.placeholder(tf.int32, shape = [None])
     schedule_kl_weight = tf.placeholder(tf.float32, shape = [])
 
-    dec_seq_len = source_len + 1
-    dec_max_len = max_len + 1
+    
+    
 
     hid_units = 50
 
@@ -110,8 +112,8 @@ with tf.variable_scope("Training"):
     # encoder
     encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(hid_units)
     # a debug found : encoder output length depends on the max len 
-    # in this batch, source_len will be check, no matter emc_embed length(shape)
-    encoder_output, encoder_final_state = tf.nn.dynamic_rnn(encoder_cell, enc_embed, dtype = tf.float32,sequence_length = source_len)
+    # in this batch, enc_len will be check, no matter emc_embed length(shape)
+    encoder_output, encoder_final_state = tf.nn.dynamic_rnn(encoder_cell, enc_embed, dtype = tf.float32,sequence_length = enc_len)
 
     latent_size = 50
 
@@ -132,7 +134,7 @@ with tf.variable_scope("Training"):
     train_attention_states = vari_enc_outputs
     train_attention_mechanism = tf.contrib.seq2seq.LuongAttention(hid_units,
                                                                   train_attention_states,
-                                                                  memory_sequence_length = source_len,
+                                                                  memory_sequence_length = enc_len,
                                                                   ) # len of attention_states = source_seq_len
 
     train_atten_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, train_attention_mechanism,
@@ -142,7 +144,7 @@ with tf.variable_scope("Training"):
     # sequence_length is the decoder sequence lengh
     # could be less than decoder input lengh but not more than decoder input lengh
 
-    train_helper = tf.contrib.seq2seq.TrainingHelper(inputs = dec_input,sequence_length = dec_seq_len) 
+    train_helper = tf.contrib.seq2seq.TrainingHelper(inputs = dec_input,sequence_length = dec_len) 
                                                
 
     # Since using attention cell, have to use this zero_state which is state.c for 
@@ -156,7 +158,7 @@ with tf.variable_scope("Training"):
 
     train_outputs, t_final_context_state, _ = tf.contrib.seq2seq.dynamic_decode(train_decoder,maximum_iterations = None)
 
-    seq_mask = tf.cast(tf.sequence_mask(dec_seq_len,dec_max_len),tf.float32)
+    seq_mask = tf.cast(tf.sequence_mask(dec_len,dec_max_len),tf.float32)
 
     train_logits = train_outputs.rnn_output
     train_ind = train_outputs.sample_id
@@ -181,13 +183,13 @@ with tf.variable_scope("Training",reuse = True):
     tiled_encoder_final_state = tf.contrib.seq2seq.tile_batch(
         dec_ini_state, multiplier=beam_width)
 
-    tiled_source_len = tf.contrib.seq2seq.tile_batch(
-        source_len, multiplier=beam_width)
+    tiled_enc_len = tf.contrib.seq2seq.tile_batch(
+        enc_len, multiplier=beam_width)
 
     attention_mechanism = tf.contrib.seq2seq.LuongAttention(
         num_units=hid_units,
         memory=tiled_encoder_outputs,
-        memory_sequence_length=tiled_source_len)
+        memory_sequence_length=tiled_enc_len)
 
     attention_cell = tf.contrib.seq2seq.AttentionWrapper(decoder_cell, attention_mechanism,
                                                          attention_layer_size = hid_units)
@@ -218,9 +220,29 @@ with tf.variable_scope("Training",reuse = True):
 
 #infer_ind = infer_outputs.sample_id
 
-def next_batch(data, batch_size):
-    for i in range(0, len(data) - batch_size, batch_size):
-        yield data[i:i+batch_size]
+def next_batch(ques, answ , batch_size):
+    for i in range(0, len(ques) - batch_size, batch_size):
+        yield ques[i:i+batch_size], answ[i:i+batch_size]
+
+def max_batch_len(batch):
+    batch_len = []
+    
+    for sent in batch:
+        batch_len.append(len(word_tokenize(sent)))
+        
+    return batch_len, max(batch_len)
+
+def batch_encode(batch, batch_size, inp_max_len, vocab, word2id, pid):
+    enc_inp = pid * np.ones([batch_size,inp_max_len])
+    for n, joke in enumerate(batch):
+        joke_words = word_tokenize(joke)
+
+        for iw, word in enumerate(joke_words):
+            if word.lower() in vocab:
+                enc_inp[n,iw] = word2id[word.lower()]
+            else:
+                enc_inp[n,iw] = (word2id["<Unk>"])
+    return enc_inp
 
 with tf.Session() as sess:
     saver = tf.train.Saver()
@@ -243,44 +265,27 @@ with tf.Session() as sess:
         generator = next_batch(joke_data,batch_size)
         total_schedule = epochs * int(len(joke_data) / batch_size)
         
-        for step,jokes in enumerate(generator):
-            inp_len = []
-            batch_rec = []
+        for step, (quess,answs) in enumerate(generator):
+        
+            
             schedule =  epoch/epochs + step/total_schedule
-            for joke in jokes:
-                joke_words = word_tokenize(joke)
-                if len(joke_words) <= 0:
-                    joke_words = ["This joke is empty, let me make one here..."]
-                inp_len.append(len(joke_words))
-                joke_w_id = []
-                for word in joke_words:
-                    if word.lower() in vocab:
-                        joke_w_id.append(word2id[word.lower()])
-                    else:
-                        joke_w_id.append(word2id["<Unk>"])
-                batch_rec.append(joke_w_id)
+            q_inp_len, q_inp_max_len = max_batch_len(quess)
+            a_inp_len, a_inp_max_len = max_batch_len(answs)
+            q_enc_inp = batch_encode(quess, batch_size, q_inp_max_len, vocab, word2id, 3)
+            a_enc_inp = batch_encode(answs, batch_size, a_inp_max_len, vocab, word2id, 1)
 
-            inp_max_len = max(inp_len)
-
-            enc_inp = 3 * np.ones([batch_size,inp_max_len])
-            for i, (w_id,leng) in enumerate(zip(batch_rec, inp_len)):
-                
-                enc_inp[i,:leng] = w_id
-                
             sos_pad = np.zeros([batch_size,1])
-            pad_pad = 3 * np.ones([batch_size,1])
-            dec_outp = np.concatenate((enc_inp,pad_pad), axis = 1)
-            dec_inp = np.concatenate((sos_pad,enc_inp), axis = 1)
-            for i, leng in enumerate(inp_len):
-                dec_outp[i,leng] = word2id["<Eos>"]
+            eos_pad = np.ones([batch_size,1])
+            dec_outp = np.concatenate((a_enc_inp,eos_pad), axis = 1)
+            dec_inp = np.concatenate((sos_pad,a_enc_inp), axis = 1)
             
             # trianing graph
             t_ind, t_loss,  _ = sess.run([train_ind, train_loss, train_step],
-                                                feed_dict = {enc_sent : enc_inp,
+                                                feed_dict = {enc_sent : q_enc_inp,
                                                              dec_sent : dec_inp,
                                                              tar_sent : dec_outp,
-                                                             source_len : inp_len,
-                                                             max_len : inp_max_len,
+                                                             enc_len : q_inp_len,
+                                                             dec_max_len : a_inp_max_len,
                                                              schedule_kl_weight : schedule})
             if step % 50 == 0:
                 
@@ -290,12 +295,12 @@ with tf.Session() as sess:
             
             
             # inference graph
-            i_ind = sess.run(infer_ind,feed_dict = {enc_sent : enc_inp,
-                                                      dec_sent : dec_inp,
-                                                      tar_sent : dec_outp,
-                                                      source_len : inp_len,
-                                                      max_len : inp_max_len,
-                                                      schedule_kl_weight : schedule})
+            i_ind = sess.run(infer_ind,feed_dict = {enc_sent : q_enc_inp,
+                                                     dec_sent : dec_inp,
+                                                     tar_sent : dec_outp,
+                                                     enc_len : q_inp_len,
+                                                     dec_max_len : a_inp_max_len,
+                                                     schedule_kl_weight : schedule})
             if step % 5 == 0:
                 
                 for inf, truth in zip(i_ind, dec_outp):
