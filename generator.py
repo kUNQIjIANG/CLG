@@ -55,5 +55,17 @@ class Generator(botModel):
     							   self.enc_outputs : enc_outputs,
     							   self.dec_iput : dec_input,
     							   self.dec_tat : dec_tar})
-
-    
+   	def reconst_loss(self,sess, enc_len, dec_len, ini_state, enc_outputs, dec_tar, dec_input):
+		return	sess.run(self.seq_loss, {self.enc_len : enc_len,
+								   self.dec_len : dec_len,
+								   self.ini_state : ini_state,
+								   self.enc_outputs : enc_outputs,
+								   self.dec_iput : dec_input,
+								   self.dec_tat : dec_tar})
+   	def output_logits(self,sess, enc_len, dec_len, ini_state, enc_outputs, dec_tar, dec_input):
+		return	sess.run(self.train_logits, {self.enc_len : enc_len,
+									   self.dec_len : dec_len,
+									   self.ini_state : ini_state,
+									   self.enc_outputs : enc_outputs,
+									   self.dec_iput : dec_input,
+									   self.dec_tat : dec_tar})
