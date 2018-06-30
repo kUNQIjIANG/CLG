@@ -220,9 +220,13 @@ with tf.variable_scope("Training",reuse = True):
 
 #infer_ind = infer_outputs.sample_id
 
-def next_batch(ques, answ , batch_size):
+def next_batch_(ques, answ , batch_size):
     for i in range(0, len(ques) - batch_size, batch_size):
         yield ques[i:i+batch_size], answ[i:i+batch_size]
+
+def next_batch(data, batch_size):
+    for i in range(0, len(ques) - batch_size, batch_size):
+        yield data[i:i+batch_size]
 
 def max_batch_len(batch):
     batch_len = []

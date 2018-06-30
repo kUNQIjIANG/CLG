@@ -13,5 +13,10 @@ class Discriminator(botModel):
 			self.enc_state = tf.placeholders(tf.float32, shape = [None, None])
 			self.proj_c = tf.layers.dense(self.enc_state, self.c_size)
 
-	def predict_c(self,sess,enc_state):
-		return sess.run(self.proj_c,{self.enc_state : enc_state})
+	def predict_c(self,enc_state):
+		return tf.layers.dense(self.enc_state, self.c_size)
+
+	def discrimi_loss(self, enc_state, true_label):
+		pred_c = self.predict_c(enc_state)
+		cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels = true_label, logits = pred_c))
+		return cross_entropy 

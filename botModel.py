@@ -4,13 +4,14 @@ class botModel:
 	def __init__(self,scope):
 		self.scope = scope
 		self.saver = tf.train.Saver()
-	
-	def save(self,sess,path):
-		self.saver.save(sess,path)
+		self.save_path = './saved_oop/' + scope + '.ckpt'
+
+	def save(self,sess):
+		self.saver.save(sess,self.save_path)
 		print("saved " + self.scope)
 
-	def load(self,sess,path):
-		self.saver.restore(sess,path)
+	def load(self,sess):
+		self.saver.restore(sess,self.save_path)
 		print("loaded " + self.scope)
 		
 
