@@ -1,11 +1,9 @@
 import tensorflow as tf 
 import os
 import trainer
+import pickle
+from trainer import Trainer
 
-hid_units = 100
-batch_size = 32 
-vocab_size = 10000
-c_size = 1
 
 def next_batch(data, batch_size):
     for i in range(0, len(ques) - batch_size, batch_size):
@@ -19,8 +17,8 @@ def max_batch_len(batch):
         
     return batch_len, max(batch_len)
 
-def batch_encode(batch, batch_size, inp_max_len, vocab, word2id, pid):
-    enc_inp = pid * np.ones([batch_size,inp_max_len])
+def batch_encode(batch, batch_size, inp_max_len, vocab, word2id, pad_id):
+    enc_inp = pad_id * np.ones([batch_size,inp_max_len])
     for n, joke in enumerate(batch):
         joke_words = word_tokenize(joke)
 
@@ -31,16 +29,27 @@ def batch_encode(batch, batch_size, inp_max_len, vocab, word2id, pid):
                 enc_inp[n,iw] = (word2id["<Unk>"])
     return enc_inp
 
+hid_units = 100
+batch_size = 32 
+
+c_size = 2
+embed_size = 50
+word_embeds = pickle.load(open('word_embeddings.pickle','rb'))
+word2id = pickle.load(open('word2id.pickle','rb'))
+id2word = pickle.load(open('id2word.pickle','rb'))
+vocab_size = pickle.load(open('vocab_size.pickle','rb'))
+vocab = pickle.load(open('vocab.pickle','rb'))
 
 with tf.Session() as sess:
 
-	trainer = Trainer(hid_units, batch_size, vocab_size, c_size)
-	if os.path.isdir('saved_oop'):
-		trainer.encoder.load(sess)
-		trainer.generator.load(sess)
-		trainer.discriminator.load(sess)
-	else:
-		sess.run(tf.global_variables_initializer())
+    trainer = Trainer(hid_units, batch_size, vocab_size, embed_size, c_size, word_embeds)
+    
+    if os.path.isdir('saved_oop'):
+        trainer.encoder.load(sess)
+        trainer.generator.load(sess)
+        trainer.discriminator.load(sess)  
+    else:
+        sess.run(tf.global_variables_initializer())
         print("global initialing")
 
     for epoch in range(epochs):
@@ -50,13 +59,13 @@ with tf.Session() as sess:
         total_schedule = epochs * int(len(joke_data) / batch_size)
         
         for step, batch_joke in enumerate(generator):
-        	schedule =  epoch/epochs + step/total_schedule
+            schedule =  epoch/epochs + step/total_schedule
 
-        	enc_label = np.ones((1,batch_size))
+            enc_label = np.zeros((batch_size,2))
 
-            inp_len, inp_max_len = max_batch_len(quess)
+            inp_len, inp_max_len = max_batch_len(batch_joke)
             
-            enc_inp = batch_encode(quess, batch_size, q_inp_max_len, vocab, word2id, 3)
+            enc_inp = batch_encode(quess, batch_size, inp_max_len, vocab, word2id, 3)
             
 
             sos_pad = np.zeros([batch_size,1])

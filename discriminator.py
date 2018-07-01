@@ -1,5 +1,5 @@
 import tensorflow as tf
-import botModel
+from botModel import botModel
 
 class Discriminator(botModel):
 	def __init__(self,c_size, hid_units):
@@ -7,6 +7,7 @@ class Discriminator(botModel):
 		self.c_size = c_size
 		self.hid_units = hid_units
 		self.build_graph()
+		
 		
 	def build_graph(self):
 		with tf.variable_scope(self.scope):
