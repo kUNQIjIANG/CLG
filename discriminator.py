@@ -21,5 +21,5 @@ class Discriminator(botModel):
 	def predict_c(self, sess, enc_inp, enc_len):
 		return sess.run(self.pred_c, {self.enc_inp: enc_inp, self.enc_len: enc_len})
 
-	def discrimi_loss(self, enc_inp, enc_len, true_labels):
+	def discrimi_loss(self, sess, enc_inp, enc_len, true_labels):
 		return sess.run(self.cross_entropy, {self.enc_inp : enc_inp, self.enc_len : enc_len, self.true_labels: true_labels})
