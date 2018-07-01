@@ -7,7 +7,7 @@ class Generator(botModel):
 		self.hid_units = hid_units
 		self.build_graph(batch_size,vocab_size)
 
-	def build_graph(self,batch_size,vocab_size):
+	def build_graph(self,batch_size,vocab_size,c_size):
 		self.enc_len = tf.placeholder(tf.float32, shape = [None])
 		self.dec_len = tf.placeholder(tf.float32, shape = [None])
 		self.dec_max_len = tf.reduced_max(self.dec_len)
@@ -18,13 +18,21 @@ class Generator(botModel):
 		self.emi_layer = tf.layers.dense(vocab_size)
 		self.decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.hid_units, reuse = tf.AUTO_REUSE)
 
+		self.sample_c = tf.contrib.distributions.OneHotCategorical(
+            logits=tf.ones([batch_size, c_size]), dtype=tf.float32).sample()
+
+		disentangle = tf.concat((self.ini_state, self.sample_c), axis=-1)
+		ini_state = tf.layers.dense(disentangle,self.hid_units, tf.nn.relu)
+
 		train_attention_states = self.enc_outputs
 		train_attention_mechanism = tf.contrib.seq2seq.LuongAttention(self.hid_units, 
 																	train_attention_states,
 																	memory_sequence_length = self.enc_len)
 		self.train_atten_cell = tf.contrib.seq2seq.AttentionWrapper(self.decoder_cell, train_attention_mechanism,
-																	initial_state = self.ini_state,
+																	initial_state = ini_state,
 																	attention_layer_size = self.hid_units)
+
+
 
 		self.train_helper = tf.contrib.seq2seq.TrainingHelper(input = self.dec_input,
 															   sequence_length = self.dec_len)
@@ -42,28 +50,17 @@ class Generator(botModel):
     													average_across_timesteps = False,
     													average_across_batch = True)
 
-		optimizer = tf.train.AdamOptimizer(1e-3)
-    	gradients, variables = zip(*optimizer.compute_gradients(train_loss))
-    	gradients = [None if gradient is None else tf.clip_by_value(gradient,-1.0,1.0)
-        				 for gradient in gradients]
-    	self.train_step = optimizer.apply_gradients(zip(gradients, variables))
-
-    def train(self, sess, enc_len, dec_len, ini_state, enc_outputs, dec_tar, dec_input):
-    	sess.run(self.train_step, {self.enc_len : enc_len,
-    							   self.dec_len : dec_len,
-    							   self.ini_state : ini_state,
-    							   self.enc_outputs : enc_outputs,
-    							   self.dec_iput : dec_input,
-    							   self.dec_tat : dec_tar})
-   	def reconst_loss(self,sess, enc_len, dec_len, ini_state, enc_outputs, dec_tar, dec_input):
+   	def reconst_loss(self, sess, enc_len, dec_len, ini_state, enc_outputs, dec_tar, dec_input):
 		return	sess.run(self.seq_loss, {self.enc_len : enc_len,
 								   self.dec_len : dec_len,
 								   self.ini_state : ini_state,
 								   self.enc_outputs : enc_outputs,
 								   self.dec_iput : dec_input,
 								   self.dec_tat : dec_tar})
-   	def output_logits(self,sess, enc_len, dec_len, ini_state, enc_outputs, dec_tar, dec_input):
-		return	sess.run(self.train_logits, {self.enc_len : enc_len,
+   	
+   	def outputs(self, sess, enc_len, dec_len, ini_state, enc_outputs, dec_tar, dec_input):
+		return	sess.run([self.train_logits, self.train_ind, self.sample_c], 
+										{self.enc_len : enc_len,
 									   self.dec_len : dec_len,
 									   self.ini_state : ini_state,
 									   self.enc_outputs : enc_outputs,

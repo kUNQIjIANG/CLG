@@ -23,14 +23,15 @@ class Trainer:
 		z = self.encoder.encode(sess,enc_input,enc_len)
 		enc_outputs = self.encoder.output_logits(self,sess,enc_input,enc_len)
 		reconst_loss = self.generator.reconst_loss(sess, enc_len, dec_len, z, enc_outputs, dec_tar, dec_input)
-		logits = self.generator.output_logits(sess, enc_len, dec_len, z, enc_outputs, dec_tar, dec_input)
+		logits, gen_sen, sample_c = self.generator.outputs(sess, enc_len, dec_len, z, enc_outputs, dec_tar, dec_input)
 		new_z = self.encoder.encode(sess,logits,dec_len)
 		c_loss = self.discriminator.discrimi_loss(new_z, sample_labels)
 		z_loss = tf.mutual_information(z,new_z)
 
 		generator_loss = reconst_loss + c_loss + z_loss
 		sess.run(self.optimize(generator_loss))
-
+		return gen_sen, sample_c
+		
 	def optimize(self,loss):
 		optimizer = tf.train.AdamOptimizer(1e-3)
     	gradients, variables = zip(*optimizer.compute_gradients(loss))

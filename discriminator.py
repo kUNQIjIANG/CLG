@@ -11,10 +11,10 @@ class Discriminator(botModel):
 	def build_graph(self):
 		with tf.variable_scope(self.scope):
 			self.enc_state = tf.placeholders(tf.float32, shape = [None, None])
-			self.proj_c = tf.layers.dense(self.enc_state, self.c_size)
+			self.proj_c = tf.layers.dense(self.c_size, tf.nn.relu)
 
 	def predict_c(self,enc_state):
-		return tf.layers.dense(self.enc_state, self.c_size)
+		return self.proj_c(enc_state)
 
 	def discrimi_loss(self, enc_state, true_label):
 		pred_c = self.predict_c(enc_state)
