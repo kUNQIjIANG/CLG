@@ -3,30 +3,30 @@ from botModel import botModel
 from tensorflow.python.layers.core import Dense
 
 class Generator(botModel):
-	def __init__(self,hid_units,batch_size,vocab_size,c_size):
+	def __init__(self,hid_units,batch_size,vocab_size,c_size,embed_size):
 		super().__init__('generator')
 		self.hid_units = hid_units
-		self.build_graph(batch_size,vocab_size,c_size)
+		self.build_graph(batch_size,vocab_size,c_size,embed_size)
 		
 
-	def build_graph(self,batch_size,vocab_size,c_size):
-		self.enc_len = tf.placeholder(tf.float32, shape = [None])
-		self.dec_len = tf.placeholder(tf.float32, shape = [None])
+	def build_graph(self,batch_size,vocab_size,c_size,embed_size):
+		#self.enc_len = tf.placeholder(tf.float32, shape = [None])
+		self.dec_len = tf.placeholder(tf.int32, shape = [None])
 		self.dec_max_len = tf.reduce_max(self.dec_len)
-		self.ini_state = tf.placeholder(tf.float32, shape = [None, None])
-		self.enc_outputs = tf.placeholder(tf.float32, shape = [None, None, None])
-		self.dec_tar = tf.placeholder(tf.float32, shape = [None, None])
-		self.dec_input = tf.placeholder(tf.float32, shape = [None, None, None])
+		#self.ini_state = tf.placeholder(tf.float32, shape = [None, None])
+		#self.enc_outputs = tf.placeholder(tf.float32, shape = [None, None, None])
+		self.dec_tar = tf.placeholder(tf.int32, shape = [None, None])
+		self.dec_input = tf.placeholder(tf.float32, shape = [batch_size, None, embed_size])
 		#self.emi_layer = tf.layers.dense(vocab_size)
-		self.decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.hid_units, reuse = tf.AUTO_REUSE)
-
+		self.decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.hid_units, state_is_tuple=True)
+		#self.decoder_cell = tf.contrib.rnn.GRUCell(self.hid_units)
 		self.sample_c = tf.contrib.distributions.OneHotCategorical(
             logits=tf.ones([batch_size, c_size]), dtype=tf.float32).sample()
 
-		disentangle = tf.concat((self.ini_state, self.sample_c), axis=-1)
-		disentangle = tf.reshape(disentangle, [batch_size, self.hid_units+c_size])
-		ini_state = tf.layers.dense(inputs = disentangle, units = self.hid_units,
-									activation = tf.nn.relu)
+		#disentangle = tf.concat((self.ini_state, self.sample_c), axis=-1)
+		#disentangle = tf.reshape(disentangle, [batch_size, self.hid_units+c_size])
+		#ini_state = tf.layers.dense(inputs = disentangle, units = self.hid_units,
+									#activation = tf.nn.relu)
 
 		"""
 		train_attention_states = self.enc_outputs
@@ -42,9 +42,10 @@ class Generator(botModel):
 
 		self.train_helper = tf.contrib.seq2seq.TrainingHelper(inputs = self.dec_input,
 															   sequence_length = self.dec_len)
-		#self.initial_state = self.decoder_cell.zero_state(dtype=tf.float32, batch_size = batch_size)
+		self.initial_state = self.decoder_cell.zero_state(dtype=tf.float32, batch_size = batch_size)
+		#
 		self.train_decoder = tf.contrib.seq2seq.BasicDecoder(self.decoder_cell, self.train_helper,
-															initial_state = ini_state,
+															initial_state = self.initial_state,
 															output_layer = Dense(vocab_size))
 		self.train_outputs, self.final_state, _ = tf.contrib.seq2seq.dynamic_decode(self.train_decoder)
     														

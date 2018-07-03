@@ -17,8 +17,8 @@ class Trainer:
 	def build_graph(self):
 
 		self.encoder = Encoder(self.hid_units)
-		self.generator = Generator(self.hid_units,self.batch_size,self.vocab_size,self.c_size)
-		self.discriminator = Discriminator(self.c_size)
+		self.generator = Generator(self.hid_units,self.batch_size,self.vocab_size,self.c_size, self.embed_size)
+		self.discriminator = Discriminator(self.c_size,self.hid_units, self.batch_size, self.embed_size)
 
 	def wakeTrain(self,sess,enc_input,enc_len,dec_input,dec_len,dec_tar):
 
