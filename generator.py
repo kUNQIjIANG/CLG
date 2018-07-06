@@ -3,23 +3,28 @@ from botModel import botModel
 from tensorflow.python.layers.core import Dense
 
 class Generator(botModel):
-	def __init__(self,hid_units,batch_size,vocab_size,c_size,embed_size):
+	def __init__(self,hid_units,batch_size,vocab_size,c_size,word_embed,embed_size):
 		super().__init__('generator')
 		self.hid_units = hid_units
+		self.word_embed = word_embed
 		self.build_graph(batch_size,vocab_size,c_size,embed_size)
 		
 
 	def build_graph(self,batch_size,vocab_size,c_size,embed_size):
-		#self.enc_len = tf.placeholder(tf.float32, shape = [None])
+		self.enc_len = tf.placeholder(tf.float32, shape = [None])
+		
 		self.dec_len = tf.placeholder(tf.int32, shape = [None])
 		self.dec_max_len = tf.reduce_max(self.dec_len)
-		#self.ini_state = tf.placeholder(tf.float32, shape = [None, None])
-		#self.enc_outputs = tf.placeholder(tf.float32, shape = [None, None, None])
-		self.dec_tar = tf.placeholder(tf.int32, shape = [None, None])
-		self.dec_input = tf.placeholder(tf.float32, shape = [batch_size, None, embed_size])
-		#self.emi_layer = tf.layers.dense(vocab_size)
+		
+		self.ini_state = tf.placeholder(tf.float32, shape = [None, None, None], name = "yiyi")
+		self.enc_outputs = tf.placeholder(tf.float32, shape = [None, None, None])
+		
+		self.dec_tar = tf.placeholder(tf.int32, shape = [batch_size, None], name = "jiji")
+		self.dec_input = tf.placeholder(tf.int32, shape = [batch_size, None], name = "zaza")
+		self.input_embed = tf.nn.embedding_lookup(self.word_embed, self.dec_input)
+		
 		self.decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.hid_units, state_is_tuple=True)
-		#self.decoder_cell = tf.contrib.rnn.GRUCell(self.hid_units)
+		
 		self.sample_c = tf.contrib.distributions.OneHotCategorical(
             logits=tf.ones([batch_size, c_size]), dtype=tf.float32).sample()
 
@@ -40,7 +45,7 @@ class Generator(botModel):
 
 
 
-		self.train_helper = tf.contrib.seq2seq.TrainingHelper(inputs = self.dec_input,
+		self.train_helper = tf.contrib.seq2seq.TrainingHelper(inputs = self.input_embed,
 															   sequence_length = self.dec_len)
 		self.initial_state = self.decoder_cell.zero_state(dtype=tf.float32, batch_size = batch_size)
 		#
@@ -61,8 +66,8 @@ class Generator(botModel):
 								   self.dec_len : dec_len,
 								   self.ini_state : ini_state,
 								   self.enc_outputs : enc_outputs,
-								   self.dec_iput : dec_input,
-								   self.dec_tat : dec_tar})
+								   self.dec_input : dec_input,
+								   self.dec_tar : dec_tar})
    	
 	def outputs(self, sess, enc_len, dec_len, ini_state, enc_outputs, dec_tar, dec_input):
 		return	sess.run([self.train_logits, self.train_ind, self.sample_c], 
@@ -70,5 +75,5 @@ class Generator(botModel):
 									   self.dec_len : dec_len,
 									   self.ini_state : ini_state,
 									   self.enc_outputs : enc_outputs,
-									   self.dec_iput : dec_input,
-									   self.dec_tat : dec_tar})
+									   self.dec_input : dec_input,
+									   self.dec_tar : dec_tar})

@@ -3,10 +3,13 @@ import os
 import trainer
 import pickle
 from trainer import Trainer
+import random
+import numpy as np
+from nltk import word_tokenize
 
 
 def next_batch(data, batch_size):
-    for i in range(0, len(ques) - batch_size, batch_size):
+    for i in range(0, len(data) - batch_size, batch_size):
         yield data[i:i+batch_size]
 
 def max_batch_len(batch):
@@ -31,7 +34,7 @@ def batch_encode(batch, batch_size, inp_max_len, vocab, word2id, pad_id):
 
 hid_units = 100
 batch_size = 32 
-
+epochs = 5
 c_size = 2
 embed_size = 50
 word_embeds = pickle.load(open('word_embeddings.pickle','rb'))
@@ -40,7 +43,11 @@ id2word = pickle.load(open('id2word.pickle','rb'))
 vocab_size = pickle.load(open('vocab_size.pickle','rb'))
 vocab = pickle.load(open('vocab.pickle','rb'))
 
+joke_data = open("shorterjokes.txt",'r').read().split('\n')
+
 with tf.Session() as sess:
+
+    word_embeds = tf.cast(word_embeds,tf.float32)
 
     trainer = Trainer(hid_units, batch_size, vocab_size, embed_size, c_size, word_embeds)
     
@@ -65,7 +72,7 @@ with tf.Session() as sess:
 
             inp_len, inp_max_len = max_batch_len(batch_joke)
             
-            enc_inp = batch_encode(quess, batch_size, inp_max_len, vocab, word2id, 3)
+            enc_inp = batch_encode(batch_joke, batch_size, inp_max_len, vocab, word2id, 3)
             
 
             sos_pad = np.zeros([batch_size,1])
@@ -76,7 +83,9 @@ with tf.Session() as sess:
             outp_len = inp_len + np.ones_like(inp_len)
             outp_max_len = inp_max_len + 1
 
+
+
             gen_sen, gen_label = trainer.wakeTrain(sess, enc_inp, inp_len, dec_inp, outp_len, dec_outp)
             con_sen = np.concatenate((enc_inp, gen_sen), axis = 0)
             con_lab = np.concatenate((enc_label, gen_label), axis = 0)
-            trainer.sleepTrain(sess, con_sen, con_len, con_label)
+            #trainer.sleepTrain(sess, con_sen, con_len, con_label)
