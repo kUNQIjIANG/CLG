@@ -83,9 +83,8 @@ with tf.Session() as sess:
             outp_len = inp_len + np.ones_like(inp_len)
             outp_max_len = inp_max_len + 1
 
-
-
-            gen_sen, gen_label = trainer.wakeTrain(sess, enc_inp, inp_len, dec_inp, outp_len, dec_outp)
-            con_sen = np.concatenate((enc_inp, gen_sen), axis = 0)
-            con_lab = np.concatenate((enc_label, gen_label), axis = 0)
+            #gen_sen, gen_label =
+            trainer.wakeTrain(sess, enc_inp, inp_len, dec_inp, outp_len, dec_outp)
+            #con_sen = np.concatenate((enc_inp, gen_sen), axis = 0)
+            #con_lab = np.concatenate((enc_label, gen_label), axis = 0)
             #trainer.sleepTrain(sess, con_sen, con_len, con_label)
