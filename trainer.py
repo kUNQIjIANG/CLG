@@ -30,7 +30,6 @@ class Trainer:
 
 
 			self.enc_len = tf.placeholder(tf.float32, shape = [None])
-			
 			self.dec_len = tf.placeholder(tf.int32, shape = [None])
 			self.dec_max_len = tf.reduce_max(self.dec_len)
 			
