@@ -294,8 +294,9 @@ with tf.Session() as sess:
             if step % 50 == 0:
                 
                 for tra, truth in zip(t_ind, dec_outp):
-                    print("truth: " + ' '.join([id2word[id] for id in truth]))
-                    print("tra: " + ' '.join([id2word[id] for id in tra]))
+                    #print("truth: " + ' '.join([id2word[id] for id in truth]))
+                    #print("tra: " + ' '.join([id2word[id] for id in tra]))
+                    print(t_loss)
             
             
             # inference graph
