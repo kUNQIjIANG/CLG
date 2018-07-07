@@ -66,7 +66,7 @@ class Trainer:
 			
 			
 
-			reconst_loss = self.generator.reconst_loss(self.dec_len, 
+			reconst_loss, u, s = self.generator.reconst_loss(self.dec_len, 
 													self.dec_max_len,
 													self.dec_tar, 
 													self.dec_embed,
@@ -87,18 +87,15 @@ class Trainer:
 		
 		# length of generated sentence ?
 
-			
-
-
-
 			# 1, force encode focus on unstructure
 			# 2, ensure unstructure part of generated sentence unchaged
 			new_z = self.encoder.encode(logit_encode, self.dec_len)
-			z_loss = tf.nn.l2_loss(z.c - new_z.c)
-
-		
+			z_loss = self.mutinfo_loss(u,s,new_z)
 			
-			self.generator_loss = reconst_loss + c_loss + z_loss
+			kl_loss = 0.5 * (tf.reduce_mean(tf.exp(s) + tf.square(u) - s - 1))
+
+
+			self.generator_loss = reconst_loss + c_loss + z_loss + kl_loss
 			self.train_step = self.optimize(self.generator_loss)
 
 	def wakeTrain(self,sess,enc_input,enc_len,dec_input,dec_len,dec_tar):
@@ -109,9 +106,16 @@ class Trainer:
 										self.dec_input : dec_input,
 										self.dec_len : dec_len,
 										self.dec_tar : dec_tar})
-		#print("generator loss: %2f" % loss)
+		print("generator loss: %2f" % loss)
 		return gen_ids, gen_labels
 		#return gen_sen, sample_c
+
+	def mutinfo_loss(self, z_mean, z_sig, new_z):
+		dist = tf.contrib.distributions.MultivariateNormalDiag(z_mean,z_sig,
+														validate_args=True)
+                                                               
+		mutinfo_loss = - dist.log_prob(new_z)              
+		return tf.reduce_mean(mutinfo_loss)
 
 	def optimize(self,loss):
 		optimizer = tf.train.AdamOptimizer(1e-3)
@@ -123,5 +127,5 @@ class Trainer:
 	def sleepTrain(self, sess, sleep_input, sleep_len, sleep_labels):
 		_, sleep_loss = sess.run([self.sleep_train_step, self.sleep_loss], {self.sleep_input : sleep_input, self.sleep_len : sleep_len, self.sleep_labels : sleep_labels})
 
-		#print("sleep loss: %2f " % sleep_loss)
+		print("sleep loss: %2f " % sleep_loss)
 

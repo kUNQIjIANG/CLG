@@ -20,38 +20,50 @@ class Generator(botModel):
 		
 		
 	def reconst_loss(self, dec_len, dec_max_len, dec_tar, input_embed, init_state):
-		disentangle = tf.concat((init_state.c, self.sample_c), axis=-1)
-		dec_ini_state = tf.contrib.rnn.LSTMStateTuple(disentangle,disentangle)
+		with tf.variable_scope(self.scope,reuse=tf.AUTO_REUSE):
+			z_size = self.hid_units - self.c_size
+			u = tf.layers.dense(init_state.c,z_size,tf.nn.sigmoid,name = "state_latent_u")
+			s = tf.layers.dense(init_state.c,z_size,tf.nn.sigmoid,name = "state_latent_s")
+			z = u + s * tf.truncated_normal(tf.shape(u),1,-1)
 
-		self.train_helper = tf.contrib.seq2seq.TrainingHelper(inputs = input_embed,
-															   sequence_length = dec_len)
-		
-		self.train_decoder = tf.contrib.seq2seq.BasicDecoder(self.decoder_cell, self.train_helper,
-															initial_state = dec_ini_state,
-															output_layer = Dense(self.vocab_size))
-		self.train_outputs, self.final_state, _ = tf.contrib.seq2seq.dynamic_decode(self.train_decoder)
-    														
-		seq_mask = tf.cast(tf.sequence_mask(dec_len, dec_max_len), tf.float32)
-		train_logits = self.train_outputs.rnn_output
-		train_ind = self.train_outputs.sample_id
-		seq_loss = tf.contrib.seq2seq.sequence_loss(train_logits, dec_tar, seq_mask,
-    													average_across_timesteps = False,
-    													average_across_batch = True)
-		return tf.reduce_mean(seq_loss)
+			disentangle = tf.concat((z, self.sample_c), axis=-1)
+			dec_ini_state = tf.contrib.rnn.LSTMStateTuple(disentangle,disentangle)
+
+			self.train_helper = tf.contrib.seq2seq.TrainingHelper(inputs = input_embed,
+																   sequence_length = dec_len)
+			
+			self.train_decoder = tf.contrib.seq2seq.BasicDecoder(self.decoder_cell, self.train_helper,
+																initial_state = dec_ini_state,
+																output_layer = Dense(self.vocab_size))
+			self.train_outputs, self.final_state, _ = tf.contrib.seq2seq.dynamic_decode(self.train_decoder)
+	    														
+			seq_mask = tf.cast(tf.sequence_mask(dec_len, dec_max_len), tf.float32)
+			train_logits = self.train_outputs.rnn_output
+			train_ind = self.train_outputs.sample_id
+			seq_loss = tf.contrib.seq2seq.sequence_loss(train_logits, dec_tar, seq_mask,
+	    													average_across_timesteps = False,
+	    													average_across_batch = True)
+		return tf.reduce_mean(seq_loss), u, s
 	def outputs(self, dec_len, dec_max_len, dec_tar, input_embed, init_state):
-		disentangle = tf.concat((init_state.c, self.sample_c), axis=-1)
-		dec_ini_state = tf.contrib.rnn.LSTMStateTuple(disentangle,disentangle)
+		with tf.variable_scope(self.scope,reuse=tf.AUTO_REUSE):
+			z_size = self.hid_units - self.c_size
+			u = tf.layers.dense(init_state.c,z_size,tf.nn.sigmoid,name = "state_latent_u")
+			s = tf.layers.dense(init_state.c,z_size,tf.nn.sigmoid,name = "state_latent_s")
+			z = u + s * tf.truncated_normal(tf.shape(u),1,-1)
 
-		self.train_helper = tf.contrib.seq2seq.TrainingHelper(inputs = input_embed,
-															   sequence_length = dec_len)
-		
-		self.train_decoder = tf.contrib.seq2seq.BasicDecoder(self.decoder_cell, self.train_helper,
-															initial_state = dec_ini_state,
-															output_layer = Dense(self.vocab_size))
-		train_outputs, final_state, _ = tf.contrib.seq2seq.dynamic_decode(self.train_decoder)
-    														
-		seq_mask = tf.cast(tf.sequence_mask(dec_len, dec_max_len), tf.float32)
-		train_logits = train_outputs.rnn_output
-		train_ind = train_outputs.sample_id
+			disentangle = tf.concat((z, self.sample_c), axis=-1)
+			dec_ini_state = tf.contrib.rnn.LSTMStateTuple(disentangle,disentangle)
+
+			self.train_helper = tf.contrib.seq2seq.TrainingHelper(inputs = input_embed,
+																   sequence_length = dec_len)
+			
+			self.train_decoder = tf.contrib.seq2seq.BasicDecoder(self.decoder_cell, self.train_helper,
+																initial_state = dec_ini_state,
+																output_layer = Dense(self.vocab_size))
+			train_outputs, final_state, _ = tf.contrib.seq2seq.dynamic_decode(self.train_decoder)
+	    														
+			seq_mask = tf.cast(tf.sequence_mask(dec_len, dec_max_len), tf.float32)
+			train_logits = train_outputs.rnn_output
+			train_ind = train_outputs.sample_id
 
 		return train_logits, train_ind, self.sample_c
