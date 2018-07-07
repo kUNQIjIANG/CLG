@@ -14,15 +14,28 @@ class Trainer:
 		self.embed_size = embed_size
 		self.c_size = c_size 
 		self.word_embed = word_embeds
-		self.build_graph()
-             
-	def build_graph(self):
 
 		self.encoder = Encoder(self.hid_units)
 		self.generator = Generator(self.hid_units,self.batch_size,self.vocab_size,self.c_size)
 		self.discriminator = Discriminator(self.hid_units, self.c_size)
 
-		with tf.variable_scope(self.scope):
+		self.build_wake_graph()
+		self.build_sleep_graph()
+
+	def build_sleep_graph(self):
+		with tf.variable_scope("sleep"):
+			self.sleep_input = tf.placeholder(tf.int32,shape = [2*self.batch_size,None], name = 'sleep_input')
+			self.sleep_embed = tf.nn.embedding_lookup(self.word_embed, self.sleep_input)
+			self.sleep_len = tf.placeholder(tf.int32, shape = [None], name = 'sleep_len')
+			self.sleep_labels = tf.placeholder(tf.int32, shape = [None, None], name = 'sleep_labels')
+
+			self.sleep_loss = self.discriminator.discrimi_loss(self.sleep_embed, self.sleep_len, self.sleep_labels)
+			self.sleep_train_step = self.optimize(self.sleep_loss)
+
+	def build_wake_graph(self):
+
+
+		with tf.variable_scope("wake"):
 
 			self.enc_input = tf.placeholder(tf.int32,shape = [32,None])
 			self.enc_embed = tf.nn.embedding_lookup(self.word_embed, self.enc_input)
@@ -55,38 +68,41 @@ class Trainer:
 
 			reconst_loss = self.generator.reconst_loss(self.dec_len, self.dec_max_len, self.dec_tar, self.dec_embed)
 			
-			logits, gen_sen, sample_c = self.generator.outputs(self.dec_len, self.dec_max_len, self.dec_tar, self.dec_embed)
+			logits, self.gen_sen, self.sample_c = self.generator.outputs(self.dec_len, self.dec_max_len, self.dec_tar, self.dec_embed)
 		
 			logits = tf.reshape(logits, [-1, self.vocab_size])
 			logit2word_embeds = tf.matmul(logits, self.word_embed)
 			logit_encode = tf.reshape(logit2word_embeds, [self.batch_size,-1,self.embed_size])
 
-			c_loss = self.discriminator.discrimi_loss(logit_encode, self.dec_len, sample_c)
+			c_loss = self.discriminator.discrimi_loss(logit_encode, self.dec_len, self.sample_c)
 		
 		
 		# length of generated sentence ?
 
-			self.generator_loss = reconst_loss + c_loss
+			
+
+
+
+			# 1, force encode focus on unstructure
+			# 2, ensure unstructure part of generated sentence unchaged
+			new_z = self.encoder.encode(logit_encode, self.dec_len)
+			z_loss = tf.nn.l2_loss(z.c - new_z.c)
+
+		
+			
+			self.generator_loss = reconst_loss + c_loss + z_loss
 			self.train_step = self.optimize(self.generator_loss)
 
 	def wakeTrain(self,sess,enc_input,enc_len,dec_input,dec_len,dec_tar):
 
-		_, loss = sess.run([self.train_step, self.generator_loss],
+		_, loss, gen_ids, gen_labels = sess.run([self.train_step, self.generator_loss, self.gen_sen, self.sample_c],
 									 {self.enc_input : enc_input,
 										self.enc_len : enc_len,
 										self.dec_input : dec_input,
 										self.dec_len : dec_len,
 										self.dec_tar : dec_tar})
-		print(loss)
-		"""
-
-		# 1, force encode focus on unstructure
-		# 2, ensure unstructure part of generated sentence unchaged
-		new_z = self.encoder.encode(sess, gen_sen, dec_len)
-		z_loss = tf.nn.l2_loss(z.c - new_z.c)
-
-		c_loss = tf.convert_to_tensor(reconst_loss, np.float32)
-		"""
+		print("generator loss: %2f" % loss)
+		return gen_ids, gen_labels
 		#return gen_sen, sample_c
 
 	def optimize(self,loss):
@@ -96,8 +112,8 @@ class Trainer:
 		train_step = optimizer.apply_gradients(zip(gradients, variables))
 		return train_step
 
-	def sleepTrain(self, sess, enc_input, enc_len, labels):
-		with tf.variable_scope(self.scope):
-			dis_loss = trainer.discriminator.discrimi_loss(sess, enc_input, enc_len, labels)
-			sess.run(self.optimizer(dis_loss))
+	def sleepTrain(self, sess, sleep_input, sleep_len, sleep_labels):
+		_, sleep_loss = sess.run([self.sleep_train_step, self.sleep_loss], {self.sleep_input : sleep_input, self.sleep_len : sleep_len, self.sleep_labels : sleep_labels})
+
+		print("sleep loss: %2f " % sleep_loss)
 

@@ -6,7 +6,7 @@ class Encoder(botModel):
 		super().__init__('encoder')
 		self.hid_units = hid_units 
 		self.build_graph()
-	#self
+
 	def build_graph(self):
 		with tf.variable_scope(self.scope):
 			self.encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.hid_units)

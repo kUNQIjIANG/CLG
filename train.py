@@ -68,7 +68,7 @@ with tf.Session() as sess:
         for step, batch_joke in enumerate(generator):
             schedule =  epoch/epochs + step/total_schedule
 
-            enc_label = np.zeros((batch_size,2))
+            enc_label = np.random.rand(batch_size,2)
 
             inp_len, inp_max_len = max_batch_len(batch_joke)
             
@@ -83,8 +83,11 @@ with tf.Session() as sess:
             outp_len = inp_len + np.ones_like(inp_len)
             outp_max_len = inp_max_len + 1
 
-            #gen_sen, gen_label =
-            trainer.wakeTrain(sess, enc_inp, inp_len, dec_inp, outp_len, dec_outp)
-            #con_sen = np.concatenate((enc_inp, gen_sen), axis = 0)
-            #con_lab = np.concatenate((enc_label, gen_label), axis = 0)
-            #trainer.sleepTrain(sess, con_sen, con_len, con_label)
+            #
+            gen_sen, gen_label = trainer.wakeTrain(sess, enc_inp, inp_len, dec_inp, outp_len, dec_outp)
+            #print(gen_sen.shape)
+            #print(enc_inp.shape)
+            con_sen = np.concatenate((enc_inp, gen_sen[:,:-1]), axis = 0)
+            con_lab = np.concatenate((enc_label, gen_label), axis = 0)
+            con_len = np.concatenate((inp_len,inp_len), axis = 0)
+            trainer.sleepTrain(sess, con_sen, con_len, con_lab)
