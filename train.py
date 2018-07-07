@@ -83,7 +83,7 @@ with tf.Session() as sess:
             outp_len = inp_len + np.ones_like(inp_len)
             outp_max_len = inp_max_len + 1
 
-            #
+            
             gen_sen, gen_label = trainer.wakeTrain(sess, enc_inp, inp_len, dec_inp, outp_len, dec_outp)
             #print(gen_sen.shape)
             #print(enc_inp.shape)
