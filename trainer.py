@@ -14,9 +14,9 @@ class Trainer:
 		self.embed_size = embed_size
 		self.c_size = c_size 
 		self.word_embed = word_embeds
-
+		self.gene_hid_units = hid_units + c_size
 		self.encoder = Encoder(self.hid_units)
-		self.generator = Generator(self.hid_units,self.batch_size,self.vocab_size,self.c_size)
+		self.generator = Generator(self.gene_hid_units,self.batch_size,self.vocab_size,self.c_size)
 		self.discriminator = Discriminator(self.hid_units, self.c_size)
 
 		self.build_wake_graph()
@@ -66,9 +66,17 @@ class Trainer:
 			
 			
 
-			reconst_loss = self.generator.reconst_loss(self.dec_len, self.dec_max_len, self.dec_tar, self.dec_embed)
+			reconst_loss = self.generator.reconst_loss(self.dec_len, 
+													self.dec_max_len,
+													self.dec_tar, 
+													self.dec_embed,
+													z)
 			
-			logits, self.gen_sen, self.sample_c = self.generator.outputs(self.dec_len, self.dec_max_len, self.dec_tar, self.dec_embed)
+			logits, self.gen_sen, self.sample_c = self.generator.outputs(self.dec_len,
+																		 self.dec_max_len,
+																		 self.dec_tar,
+																		 self.dec_embed,
+																		 z)
 		
 			logits = tf.reshape(logits, [-1, self.vocab_size])
 			logit2word_embeds = tf.matmul(logits, self.word_embed)
@@ -101,7 +109,7 @@ class Trainer:
 										self.dec_input : dec_input,
 										self.dec_len : dec_len,
 										self.dec_tar : dec_tar})
-		print("generator loss: %2f" % loss)
+		#print("generator loss: %2f" % loss)
 		return gen_ids, gen_labels
 		#return gen_sen, sample_c
 
@@ -115,5 +123,5 @@ class Trainer:
 	def sleepTrain(self, sess, sleep_input, sleep_len, sleep_labels):
 		_, sleep_loss = sess.run([self.sleep_train_step, self.sleep_loss], {self.sleep_input : sleep_input, self.sleep_len : sleep_len, self.sleep_labels : sleep_labels})
 
-		print("sleep loss: %2f " % sleep_loss)
+		#print("sleep loss: %2f " % sleep_loss)
 

@@ -87,6 +87,11 @@ with tf.Session() as sess:
             gen_sen, gen_label = trainer.wakeTrain(sess, enc_inp, inp_len, dec_inp, outp_len, dec_outp)
             #print(gen_sen.shape)
             #print(enc_inp.shape)
+            if step % 5 == 0:
+                
+                for inf, truth in zip(gen_sen, dec_outp):
+                    print("truth: " + ' '.join([id2word[id] for id in truth]))
+                    print("inf: " + ' '.join([id2word[id] for id in inf]))   
             con_sen = np.concatenate((enc_inp, gen_sen[:,:-1]), axis = 0)
             con_lab = np.concatenate((enc_label, gen_label), axis = 0)
             con_len = np.concatenate((inp_len,inp_len), axis = 0)

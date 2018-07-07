@@ -17,19 +17,17 @@ class Generator(botModel):
 			self.decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.hid_units, state_is_tuple=True)
 			self.sample_c = tf.contrib.distributions.OneHotCategorical(
 	            logits=tf.ones([self.batch_size, self.c_size]), dtype=tf.float32).sample()
-			
-			#disentangle = tf.concat((self.ini_state, self.sample_c), axis=-1)
-			#disentangle = tf.reshape(disentangle, [batch_size, self.hid_units+c_size])
-			#ini_state = tf.layers.dense(inputs = disentangle, units = self.hid_units,
-										#activation = tf.nn.relu)
+		
+		
+	def reconst_loss(self, dec_len, dec_max_len, dec_tar, input_embed, init_state):
+		disentangle = tf.concat((init_state.c, self.sample_c), axis=-1)
+		dec_ini_state = tf.contrib.rnn.LSTMStateTuple(disentangle,disentangle)
 
-	def reconst_loss(self, dec_len, dec_max_len, dec_tar, input_embed):
 		self.train_helper = tf.contrib.seq2seq.TrainingHelper(inputs = input_embed,
 															   sequence_length = dec_len)
-		self.initial_state = self.decoder_cell.zero_state(dtype=tf.float32, batch_size = self.batch_size)
-		#
+		
 		self.train_decoder = tf.contrib.seq2seq.BasicDecoder(self.decoder_cell, self.train_helper,
-															initial_state = self.initial_state,
+															initial_state = dec_ini_state,
 															output_layer = Dense(self.vocab_size))
 		self.train_outputs, self.final_state, _ = tf.contrib.seq2seq.dynamic_decode(self.train_decoder)
     														
@@ -40,13 +38,15 @@ class Generator(botModel):
     													average_across_timesteps = False,
     													average_across_batch = True)
 		return tf.reduce_mean(seq_loss)
-	def outputs(self, dec_len, dec_max_len, dec_tar, input_embed):
+	def outputs(self, dec_len, dec_max_len, dec_tar, input_embed, init_state):
+		disentangle = tf.concat((init_state.c, self.sample_c), axis=-1)
+		dec_ini_state = tf.contrib.rnn.LSTMStateTuple(disentangle,disentangle)
+
 		self.train_helper = tf.contrib.seq2seq.TrainingHelper(inputs = input_embed,
 															   sequence_length = dec_len)
-		self.initial_state = self.decoder_cell.zero_state(dtype=tf.float32, batch_size = self.batch_size)
-		#
+		
 		self.train_decoder = tf.contrib.seq2seq.BasicDecoder(self.decoder_cell, self.train_helper,
-															initial_state = self.initial_state,
+															initial_state = dec_ini_state,
 															output_layer = Dense(self.vocab_size))
 		train_outputs, final_state, _ = tf.contrib.seq2seq.dynamic_decode(self.train_decoder)
     														
