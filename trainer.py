@@ -5,7 +5,7 @@ from generator import Generator
 from discriminator import Discriminator
 
 class Trainer:
-	def __init__(self, hid_units, batch_size, vocab_size, embed_size, c_size, word_embeds):
+	def __init__(self, hid_units, batch_size, vocab_size, embed_size, c_size, word_embeds, sos_id, eos_id, beam_width):
 
 		self.scope = 'Train'
 		self.hid_units = hid_units
@@ -15,12 +15,14 @@ class Trainer:
 		self.c_size = c_size 
 		self.word_embed = word_embeds
 		self.gene_hid_units = hid_units + c_size
+		
 		self.encoder = Encoder(self.hid_units)
-		self.generator = Generator(self.gene_hid_units,self.batch_size,self.vocab_size,self.c_size)
+		self.generator = Generator(self.gene_hid_units,self.batch_size,self.vocab_size,self.c_size,sos_id,eos_id,beam_width)
 		self.discriminator = Discriminator(self.hid_units, self.c_size)
 
 		self.build_wake_graph()
 		self.build_sleep_graph()
+		self.build_infer_graph()
 
 	def build_sleep_graph(self):
 		with tf.variable_scope("sleep"):
@@ -37,7 +39,7 @@ class Trainer:
 
 		with tf.variable_scope("wake"):
 
-			self.enc_input = tf.placeholder(tf.int32,shape = [32,None])
+			self.enc_input = tf.placeholder(tf.int32,shape = [self.batch_size,None])
 			self.enc_embed = tf.nn.embedding_lookup(self.word_embed, self.enc_input)
 			self.enc_len = tf.placeholder(tf.int32, shape = [None])
 
@@ -53,30 +55,18 @@ class Trainer:
 			self.dec_input = tf.placeholder(tf.int32, shape = [self.batch_size, None], name = "zaza")
 			self.dec_embed = tf.nn.embedding_lookup(self.word_embed, self.dec_input)
 
-
-			self.enc_inp = tf.placeholder(tf.float32, shape = [self.batch_size, None, self.embed_size])
-			self.enc_len = tf.placeholder(tf.int32, shape = [None])
-			self.true_labels = tf.placeholder(tf.int32, shape = [None, None])
-
-			#enc_input = tf.cast(enc_input, tf.int32)
-			#enc_embed = tf.nn.embedding_lookup(self.word_embeds, enc_input)
 			
 			z = self.encoder.encode(self.enc_embed,self.enc_len)
 			enc_outputs = self.encoder.output_logits(self.enc_embed, self.enc_len)
 			
 			
 
-			reconst_loss, u, s = self.generator.reconst_loss(self.dec_len, 
-													self.dec_max_len,
-													self.dec_tar, 
-													self.dec_embed,
-													z)
-			
-			logits, self.gen_sen, self.sample_c = self.generator.outputs(self.dec_len,
-																		 self.dec_max_len,
-																		 self.dec_tar,
-																		 self.dec_embed,
-																		 z)
+			reconst_loss, u, s, logits, self.gen_sen, self.sample_c = self.generator.reconst_loss(self.dec_len, 
+																		self.dec_max_len,
+																		self.dec_tar, 
+																		self.dec_embed,
+																		z)
+		
 		
 			logits = tf.reshape(logits, [-1, self.vocab_size])
 			logit2word_embeds = tf.matmul(logits, self.word_embed)
@@ -97,6 +87,23 @@ class Trainer:
 
 			self.generator_loss = reconst_loss + c_loss + z_loss + kl_loss
 			self.train_step = self.optimize(self.generator_loss)
+
+	def build_infer_graph(self):
+		with tf.variable_scope("infer"):
+
+			self.inf_input = tf.placeholder(tf.int32,shape = [self.batch_size,None])
+			self.inf_embed = tf.nn.embedding_lookup(self.word_embed, self.inf_input)
+			self.inf_len = tf.placeholder(tf.int32, shape = [None])
+			
+			inf_z = self.encoder.encode(self.inf_embed,self.inf_len)
+			inf_max_len = tf.reduce_max(self.inf_len)
+			self.infer_ids = self.generator.infer(inf_z, inf_max_len, self.word_embed)
+
+	def inference(self,sess,inf_input,inf_len):
+		infer_ids = sess.run(self.infer_ids,{self.inf_input : inf_input,
+											 self.inf_len : inf_len})
+
+		return infer_ids
 
 	def wakeTrain(self,sess,enc_input,enc_len,dec_input,dec_len,dec_tar):
 

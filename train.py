@@ -36,7 +36,10 @@ hid_units = 100
 batch_size = 32 
 epochs = 5
 c_size = 2
+beam_width = 5
 embed_size = 50
+sos_id = 0
+eos_id = 1
 word_embeds = pickle.load(open('word_embeddings.pickle','rb'))
 word2id = pickle.load(open('word2id.pickle','rb'))
 id2word = pickle.load(open('id2word.pickle','rb'))
@@ -49,7 +52,7 @@ with tf.Session() as sess:
 
     word_embeds = tf.cast(word_embeds,tf.float32)
 
-    trainer = Trainer(hid_units, batch_size, vocab_size, embed_size, c_size, word_embeds)
+    trainer = Trainer(hid_units, batch_size, vocab_size, embed_size, c_size, word_embeds, sos_id, eos_id,beam_width)
     
     if os.path.isdir('saved_oop'):
         trainer.encoder.load(sess)
@@ -87,12 +90,13 @@ with tf.Session() as sess:
             gen_sen, gen_label = trainer.wakeTrain(sess, enc_inp, inp_len, dec_inp, outp_len, dec_outp)
             #print(gen_sen.shape)
             #print(enc_inp.shape)
-            if step % 5 == 0:
-                
-                for inf, truth in zip(gen_sen, dec_outp):
-                    print("truth: " + ' '.join([id2word[id] for id in truth]))
-                    print("inf: " + ' '.join([id2word[id] for id in inf]))   
+  
             con_sen = np.concatenate((enc_inp, gen_sen[:,:-1]), axis = 0)
             con_lab = np.concatenate((enc_label, gen_label), axis = 0)
             con_len = np.concatenate((inp_len,inp_len), axis = 0)
             trainer.sleepTrain(sess, con_sen, con_len, con_lab)
+            inf_ids = trainer.inference(sess,enc_inp, inp_len)
+            if step % 10 == 0:
+                for inf, truth in zip(inf_ids, dec_outp):
+                    print("truth: " + ' '.join([id2word[id] for id in truth]))
+                    print("inf: " + ' '.join([id2word[id] for id in inf])) 
