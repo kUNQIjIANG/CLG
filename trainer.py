@@ -42,12 +42,11 @@ class Trainer:
 			self.enc_input = tf.placeholder(tf.int32,shape = [self.batch_size,None])
 			self.enc_embed = tf.nn.embedding_lookup(self.word_embed, self.enc_input)
 			self.enc_len = tf.placeholder(tf.int32, shape = [None])
+			#self.enc_len = tf.count_nonzero(self.enc_input, axis = 1)
 
-
-			self.enc_len = tf.placeholder(tf.float32, shape = [None])
-			self.dec_len = tf.placeholder(tf.int32, shape = [None])
-			self.dec_max_len = tf.reduce_max(self.dec_len)
 			
+			self.dec_len = tf.placeholder(tf.int32, shape = [None])
+
 			#self.ini_state = tf.placeholder(tf.float32, shape = [None, None, None], name = "yiyi")
 			#self.enc_outputs = tf.placeholder(tf.float32, shape = [None, None, None])
 			
@@ -55,7 +54,9 @@ class Trainer:
 			self.dec_input = tf.placeholder(tf.int32, shape = [self.batch_size, None], name = "zaza")
 			self.dec_embed = tf.nn.embedding_lookup(self.word_embed, self.dec_input)
 
-			
+			#self.dec_len = tf.count_nonzero(self.dec_input)
+			self.dec_max_len = tf.reduce_max(self.dec_len)
+
 			z = self.encoder.encode(self.enc_embed,self.enc_len)
 			enc_outputs = self.encoder.output_logits(self.enc_embed, self.enc_len)
 			
