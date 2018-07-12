@@ -46,7 +46,7 @@ with tf.Session() as sess:
                 enc_inp, dec_inp, dec_tar = sess.run(iterator.get_next())
                 
                 enc_len, dec_len = sess.run([tf.count_nonzero(enc_inp, axis = 1),
-                							tf.count_nonzero(dec_inp, axis = 1)])
+                							 tf.count_nonzero(dec_inp, axis = 1)])
 
                 enc_label = np.random.rand(batch_size,2)
                 #gen_sen, gen_label = trainer.wakeTrain(sess, enc_inp, inp_len, dec_inp, outp_len, dec_outp)
