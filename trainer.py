@@ -43,7 +43,6 @@ class Trainer:
 			self.enc_embed = tf.nn.embedding_lookup(self.word_embed, self.enc_input)
 			self.enc_len = tf.placeholder(tf.int32, shape = [None])
 			#self.enc_len = tf.count_nonzero(self.enc_input, axis = 1)
-
 			self.dec_len = tf.placeholder(tf.int32, shape = [None])
 
 			#self.ini_state = tf.placeholder(tf.float32, shape = [None, None, None], name = "yiyi")
