@@ -10,6 +10,7 @@ class DataFlow:
 		self.word2id['<sos>'] = 1
 		self.word2id['<unk>'] = 2
 		self.word2id['<eos>'] = 3
+		self.word2id['<spc>'] = 4 
 		self.id2word = {k : w for w,k in self.word2id.items()}
 		self.vocab_size = vocab_size 
 		self.max_len = max_len
