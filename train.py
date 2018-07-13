@@ -43,17 +43,18 @@ with tf.Session() as sess:
             step = 1
             try:
                 #enc_inp, dec_inp, dec_tar = iterator.get_next()
-                enc_inp, dec_inp, dec_tar = sess.run(iterator.get_next())
+                enc_inp, dec_inp, dec_tar, enc_label = sess.run(iterator.get_next())
                 
                 enc_len, dec_len = sess.run([tf.count_nonzero(enc_inp, axis = 1),
                 							 tf.count_nonzero(dec_inp, axis = 1)])
-
-                enc_label = np.random.rand(batch_size,2)
+                
+                enc_label = sess.run(tf.one_hot(enc_label, depth = 2))
+                
                 #gen_sen, gen_label = trainer.wakeTrain(sess, enc_inp, inp_len, dec_inp, outp_len, dec_outp)
                 #print(gen_sen.shape)
                 #print(enc_inp.shape)
                 gen_sen, gen_label = trainer.wakeTrain(sess, enc_inp, enc_len, dec_inp, dec_len, dec_tar)
-
+                
                 con_sen = np.concatenate((enc_inp, gen_sen[:,:-1]), axis = 0)
                 con_lab = np.concatenate((enc_label, gen_label), axis = 0)
                 con_len = np.concatenate((enc_len,enc_len), axis = 0)

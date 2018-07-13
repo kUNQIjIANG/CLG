@@ -18,19 +18,17 @@ class DataFlow:
 
 	def load(self):
 		(x_train, y_train), (x_test, y_test) = tf.keras.datasets.imdb.load_data(num_words = self.vocab_size, index_from = 4)
-		data = np.concatenate((x_train,x_test))
+		x = np.concatenate((x_train,x_test))
+		y = np.concatenate((y_train,y_test))
 
-		pre_trunc = tf.keras.preprocessing.sequence.pad_sequences(data, self.max_len + 1,
-													truncating = 'pre', padding = 'post')
-		post_trunc = tf.keras.preprocessing.sequence.pad_sequences(data, self.max_len + 1,
+		x = tf.keras.preprocessing.sequence.pad_sequences(x, self.max_len + 1,
 													truncating = 'post', padding = 'post')
-		aug_data = np.concatenate((pre_trunc, post_trunc))
+	
+		enc_inp = x[:, 1:]
+		dec_inp = x
+		dec_tar = np.concatenate((x[:,1:], np.full([x.shape[0],1],self.word2id['<eos>'])), axis = -1)
 
-		enc_inp = aug_data[:, 1:]
-		dec_inp = aug_data
-		dec_tar = np.concatenate((aug_data[:,1:], np.full([aug_data.shape[0],1],1)), axis = -1)
-
-		dataPipe = tf.data.Dataset.from_tensor_slices((enc_inp,dec_inp,dec_tar))
+		dataPipe = tf.data.Dataset.from_tensor_slices((enc_inp,dec_inp,dec_tar,y))
 		dataPipe = dataPipe.shuffle(len(enc_inp)).batch(self.batch_size)
 		iterator = dataPipe.make_initializable_iterator()
 
