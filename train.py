@@ -33,13 +33,11 @@ with tf.Session() as sess:
     else:
         sess.run(tf.global_variables_initializer())
         print("global initialing")
-
+    step = 1
     for epoch in range(epochs):
         sess.run(iterator.initializer)
         while True:
-            step = 1
             try:
-                
                 enc_inp, dec_inp, dec_tar, enc_label = sess.run(iterator.get_next())
                 
                 enc_len, dec_len = sess.run([tf.count_nonzero(enc_inp, axis = 1),
@@ -49,18 +47,26 @@ with tf.Session() as sess:
                 
                 given_c = np.concatenate((np.zeros([batch_size,1]),np.ones([batch_size,1])),axis=1)
 
-                gen_sen, gen_label = trainer.wakeTrain(sess, enc_inp, enc_len, dec_inp, dec_len, dec_tar)
+                gen_sen, gen_label = trainer.wakeTrain(sess, enc_inp, enc_len, dec_inp, dec_len, dec_tar,step)
                 
                 con_sen = np.concatenate((enc_inp, gen_sen[:,:-1]), axis = 0)
                 con_lab = np.concatenate((enc_label, gen_label), axis = 0)
                 con_len = np.concatenate((enc_len,enc_len), axis = 0)
                 trainer.sleepTrain(sess, con_sen, con_len, con_lab)
-                inf_ids = trainer.inference(sess,enc_inp, enc_len,given_c)
-                
+                #inf_ids = trainer.inference(sess,enc_inp, enc_len,given_c)
+
+                # trianing output
+                if step % 10 == 0:
+                    for tr, truth in zip(gen_sen, dec_tar):
+                        print("truth: " + ' '.join([data.id2word[id] for id in truth]))
+                        print("train: " + ' '.join([data.id2word[id] for id in tr])) 
+                """
+                # inference output 
                 if step % 1 == 0:
                     for inf, truth in zip(inf_ids, dec_tar):
                         print("truth: " + ' '.join([data.id2word[id] for id in truth]))
                         print("inf: " + ' '.join([data.id2word[id] for id in inf])) 
-            
+                """
+                step += 1
             except tf.errors.OutOfRangeError:
                 break

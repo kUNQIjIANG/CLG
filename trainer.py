@@ -38,7 +38,7 @@ class Trainer:
 
 
 		with tf.variable_scope("wake"):
-
+			self.step = tf.placeholder(tf.int32,shape = [])
 			self.enc_input = tf.placeholder(tf.int32,shape = [self.batch_size,None])
 			self.enc_embed = tf.nn.embedding_lookup(self.word_embed, self.enc_input)
 			self.enc_len = tf.placeholder(tf.int32, shape = [None])
@@ -65,7 +65,8 @@ class Trainer:
 																		self.dec_embed,
 																		z)
 		
-		
+			# transfer generator decoder output logits into soft-inputs
+			# for distriminator 
 			logits = tf.reshape(logits, [-1, self.vocab_size])
 			logit2word_embeds = tf.matmul(logits, self.word_embed)
 			logit_encode = tf.reshape(logit2word_embeds, [self.batch_size,-1,self.embed_size])
@@ -81,9 +82,9 @@ class Trainer:
 			z_loss = self.mutinfo_loss(u,s,new_z)
 			
 			kl_loss = 0.5 * (tf.reduce_mean(tf.exp(s) + tf.square(u) - s - 1))
+			kl_weight = 1 * tf.sigmoid((10/6000)*(tf.to_float(self.step) - tf.constant(6000/2)))
 
-
-			self.generator_loss = reconst_loss + c_loss + z_loss + kl_loss
+			self.generator_loss = reconst_loss + c_loss + z_loss + kl_weight*kl_loss
 			self.train_step = self.optimize(self.generator_loss)
 
 	def build_infer_graph(self):
@@ -105,15 +106,16 @@ class Trainer:
 
 		return infer_ids
 
-	def wakeTrain(self,sess,enc_input,enc_len,dec_input,dec_len,dec_tar):
+	def wakeTrain(self,sess,enc_input,enc_len,dec_input,dec_len,dec_tar,step):
 
 		_, loss, gen_ids, gen_labels = sess.run([self.train_step, self.generator_loss, self.gen_sen, self.sample_c],
 									 {self.enc_input : enc_input,
 										self.enc_len : enc_len,
 										self.dec_input : dec_input,
 										self.dec_len : dec_len,
-										self.dec_tar : dec_tar})
-		print("generator loss: %2f" % loss)
+										self.dec_tar : dec_tar,
+										self.step : step})
+		#print("generator loss: %2f" % loss)
 		return gen_ids, gen_labels
 		#return gen_sen, sample_c
 
@@ -134,5 +136,5 @@ class Trainer:
 	def sleepTrain(self, sess, sleep_input, sleep_len, sleep_labels):
 		_, sleep_loss = sess.run([self.sleep_train_step, self.sleep_loss], {self.sleep_input : sleep_input, self.sleep_len : sleep_len, self.sleep_labels : sleep_labels})
 
-		print("sleep loss: %2f " % sleep_loss)
+		#print("sleep loss: %2f " % sleep_loss)
 
