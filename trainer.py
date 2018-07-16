@@ -92,14 +92,16 @@ class Trainer:
 			self.inf_input = tf.placeholder(tf.int32,shape = [self.batch_size,None])
 			self.inf_embed = tf.nn.embedding_lookup(self.word_embed, self.inf_input)
 			self.inf_len = tf.placeholder(tf.int32, shape = [None])
+			self.given_c = tf.placeholder(tf.float32, shape = [self.batch_size, None])
 			
 			inf_z = self.encoder.encode(self.inf_embed,self.inf_len)
 			inf_max_len = tf.reduce_max(self.inf_len)
-			self.infer_ids = self.generator.infer(inf_z, inf_max_len, self.word_embed)
+			self.infer_ids = self.generator.infer(inf_z, inf_max_len, self.word_embed, self.given_c)
 
-	def inference(self,sess,inf_input,inf_len):
+	def inference(self,sess,inf_input,inf_len,given_c):
 		infer_ids = sess.run(self.infer_ids,{self.inf_input : inf_input,
-											 self.inf_len : inf_len})
+											 self.inf_len : inf_len,
+											 self.given_c : given_c})
 
 		return infer_ids
 

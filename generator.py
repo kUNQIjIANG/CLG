@@ -20,9 +20,7 @@ class Generator(botModel):
 	def build_graph(self):
 		with tf.variable_scope(self.scope):
 			self.decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.hid_units, state_is_tuple=True)
-			self.sample_c = tf.contrib.distributions.OneHotCategorical(
-	            logits=tf.ones([self.batch_size, self.c_size]), dtype=tf.float32).sample()
-		
+
 		
 	def reconst_loss(self, dec_len, dec_max_len, dec_tar, input_embed, init_state):
 		with tf.variable_scope(self.scope,reuse=tf.AUTO_REUSE):
@@ -30,8 +28,11 @@ class Generator(botModel):
 			u = tf.layers.dense(init_state.c,self.z_size,tf.nn.sigmoid,name = "state_latent_u")
 			s = tf.layers.dense(init_state.c,self.z_size,tf.nn.sigmoid,name = "state_latent_s")
 			z = u + s * tf.truncated_normal(tf.shape(u),1,-1)
-
-			disentangle = tf.concat((z, self.sample_c), axis=-1)
+			
+			sample_c = tf.contrib.distributions.OneHotCategorical(
+	            logits=tf.ones([self.batch_size, self.c_size]), dtype=tf.float32).sample()
+		
+			disentangle = tf.concat((z, sample_c), axis=-1)
 			dec_ini_state = tf.contrib.rnn.LSTMStateTuple(disentangle,disentangle)
 
 			self.train_helper = tf.contrib.seq2seq.TrainingHelper(inputs = input_embed,
@@ -48,17 +49,16 @@ class Generator(botModel):
 			seq_loss = tf.contrib.seq2seq.sequence_loss(train_logits, dec_tar, seq_mask,
 	    													average_across_timesteps = False,
 	    													average_across_batch = True)
-			return tf.reduce_mean(seq_loss), u, s, train_logits, train_ind, self.sample_c
+			return tf.reduce_mean(seq_loss), u, s, train_logits, train_ind, sample_c
 
-	def infer(self,init_state, inf_max_len, word_embed):
+	def infer(self,init_state, inf_max_len, word_embed, given_c):
 		with tf.variable_scope(self.scope, reuse = tf.AUTO_REUSE):
 
-			
 			inf_u = tf.layers.dense(init_state.c,self.z_size,tf.nn.sigmoid,name = "state_latent_u", reuse = tf.AUTO_REUSE)
 			inf_s = tf.layers.dense(init_state.c,self.z_size,tf.nn.sigmoid,name = "state_latent_s", reuse = tf.AUTO_REUSE)
 			inf_z = inf_u + inf_s * tf.truncated_normal(tf.shape(inf_u),1,-1)
 
-			disentangle = tf.concat((inf_z, self.sample_c), axis=-1)
+			disentangle = tf.concat((inf_z, given_c), axis=-1)
 			dec_ini_state = tf.contrib.rnn.LSTMStateTuple(disentangle,disentangle)
 			tailed_init_state = tf.contrib.seq2seq.tile_batch(dec_ini_state, multiplier = self.beam_width)
 

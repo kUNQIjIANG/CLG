@@ -8,9 +8,6 @@ import numpy as np
 from nltk import word_tokenize
 from data import DataFlow 
 
-
-
-
 hid_units = 100
 batch_size = 32 
 epochs = 5
@@ -42,7 +39,7 @@ with tf.Session() as sess:
         while True:
             step = 1
             try:
-                #enc_inp, dec_inp, dec_tar = iterator.get_next()
+                
                 enc_inp, dec_inp, dec_tar, enc_label = sess.run(iterator.get_next())
                 
                 enc_len, dec_len = sess.run([tf.count_nonzero(enc_inp, axis = 1),
@@ -50,16 +47,16 @@ with tf.Session() as sess:
                 
                 enc_label = sess.run(tf.one_hot(enc_label, depth = 2))
                 
-                #gen_sen, gen_label = trainer.wakeTrain(sess, enc_inp, inp_len, dec_inp, outp_len, dec_outp)
-                #print(gen_sen.shape)
-                #print(enc_inp.shape)
+                given_c = np.concatenate((np.zeros([batch_size,1]),np.ones([batch_size,1])),axis=1)
+
                 gen_sen, gen_label = trainer.wakeTrain(sess, enc_inp, enc_len, dec_inp, dec_len, dec_tar)
                 
                 con_sen = np.concatenate((enc_inp, gen_sen[:,:-1]), axis = 0)
                 con_lab = np.concatenate((enc_label, gen_label), axis = 0)
                 con_len = np.concatenate((enc_len,enc_len), axis = 0)
                 trainer.sleepTrain(sess, con_sen, con_len, con_lab)
-                inf_ids = trainer.inference(sess,enc_inp, enc_len)
+                inf_ids = trainer.inference(sess,enc_inp, enc_len,given_c)
+                
                 if step % 1 == 0:
                     for inf, truth in zip(inf_ids, dec_tar):
                         print("truth: " + ' '.join([data.id2word[id] for id in truth]))
