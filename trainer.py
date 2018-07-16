@@ -26,12 +26,12 @@ class Trainer:
 
 	def build_sleep_graph(self):
 		with tf.variable_scope("sleep"):
-			self.sleep_input = tf.placeholder(tf.int32,shape = [2*self.batch_size,None], name = 'sleep_input')
+			self.sleep_input = tf.placeholder(tf.int32,shape = [None,None], name = 'sleep_input')
 			self.sleep_embed = tf.nn.embedding_lookup(self.word_embed, self.sleep_input)
 			self.sleep_len = tf.placeholder(tf.int32, shape = [None], name = 'sleep_len')
 			self.sleep_labels = tf.placeholder(tf.int32, shape = [None, None], name = 'sleep_labels')
 
-			self.sleep_loss = self.discriminator.discrimi_loss(self.sleep_embed, self.sleep_len, self.sleep_labels)
+			self.sleep_loss, self.discri_acc = self.discriminator.discrimi_loss(self.sleep_embed, self.sleep_len, self.sleep_labels)
 			self.sleep_train_step = self.optimize(self.sleep_loss)
 
 	def build_wake_graph(self):
@@ -134,7 +134,10 @@ class Trainer:
 		return train_step
 
 	def sleepTrain(self, sess, sleep_input, sleep_len, sleep_labels):
-		_, sleep_loss = sess.run([self.sleep_train_step, self.sleep_loss], {self.sleep_input : sleep_input, self.sleep_len : sleep_len, self.sleep_labels : sleep_labels})
+		_, sleep_loss, acc = sess.run([self.sleep_train_step, self.sleep_loss, self.discri_acc],
+								 {self.sleep_input : sleep_input,
+								  self.sleep_len : sleep_len,
+								  self.sleep_labels : sleep_labels})
 
 		#print("sleep loss: %2f " % sleep_loss)
-
+		return sleep_loss, acc 
