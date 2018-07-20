@@ -25,9 +25,9 @@ class Discriminator(botModel):
 			enc_output, enc_final_state = tf.nn.dynamic_rnn(self.encoder_cell, enc_inp, dtype = tf.float32, sequence_length = enc_len)
 			
 			self.pred_c = tf.layers.dense(inputs = enc_final_state.c , units = self.c_size, name = 'disen_logits')
-			self.cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels = true_labels, logits = self.pred_c))
+			self.cross_entropy = tf.reduce_sum(tf.nn.softmax_cross_entropy_with_logits(labels = true_labels, logits = self.pred_c))
 
 			self.correct_prediction = tf.equal(tf.argmax(true_labels, 1), tf.argmax(self.pred_c, 1))
 			self.accuracy = tf.reduce_mean(tf.cast(self.correct_prediction, tf.float32))
 			
-			return self.cross_entropy, self.accuracy
+			return self.pred_c, self.cross_entropy, self.accuracy
