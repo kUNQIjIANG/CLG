@@ -49,7 +49,7 @@ class Generator(botModel):
 			seq_loss = tf.contrib.seq2seq.sequence_loss(train_logits, dec_tar, seq_mask,
 	    													average_across_timesteps = False,
 	    													average_across_batch = True)
-			return tf.reduce_mean(seq_loss), u, s, train_logits, train_ind, sample_c
+			return tf.reduce_sum(seq_loss), u, s, train_logits, train_ind, sample_c
 
 	def infer(self,init_state, inf_max_len, word_embed, given_c):
 		with tf.variable_scope(self.scope, reuse = tf.AUTO_REUSE):

@@ -105,7 +105,8 @@ class Trainer:
 			self.new_z = self.encoder.encode(logit_encode, self.dec_len)
 			self.z_loss = self.mutinfo_loss(u,s,self.new_z)
 			
-			self.kl_loss = 0.5 * (tf.reduce_mean(tf.exp(s) + tf.square(u) - s - 1))
+			self.kl_loss = 0.5 * (tf.reduce_sum(tf.exp(s) + tf.square(u) - s - 1)) / tf.to_float(tf.shape(u)[0])
+			
 			kl_weight = 1 * tf.sigmoid((10/6000)*(tf.to_float(self.step) - tf.constant(6000/2)))
 
 			weight = tf.constant(0.1)

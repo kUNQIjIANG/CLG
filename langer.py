@@ -1,91 +1,29 @@
-
-import tensorflow as tf
-import numpy as np
-import gensim
-import pickle
+import tensorflow as tf 
 import os
+import trainer
+import pickle
+from trainer import Trainer
 import random
+import numpy as np
 from nltk import word_tokenize
+from data import DataFlow 
 from tensorflow.python.layers.core import Dense
 from tensorflow.contrib.seq2seq.python.ops import beam_search_decoder
 
-print(os.path.isfile("word_embeddings.pickle"))
-#test push
-
-#decoder_emb_inp = tf.get_variable("decoder_inp",[1,5,10],initializer = initializer)
+hid_units = 100
+batch_size = 32 
+epochs = 5
+c_size = 2
+beam_width = 5
+embed_size = 300
 sos_id = 0
 eos_id = 1
-batch_size = 32
-beam_width = 5
-
-if os.path.isfile("word_embeddings.pickle"):
-    word_embeddings = pickle.load(open('word_embeddings.pickle','rb'))
-    word2id = pickle.load(open('word2id.pickle','rb'))
-    id2word = pickle.load(open('id2word.pickle','rb'))
-    vocab_size = pickle.load(open('vocab_size.pickle','rb'))
-    vocab = pickle.load(open('vocab.pickle','rb'))
-    print("loading done")
-else:
-    word2vec = gensim.models.KeyedVectors.load_word2vec_format('glove.txt', binary=False)
-    vocab = []
-    for joke in open("shorterjokes.txt").read().split("\n"):
-        for word in word_tokenize(joke):
-            if word.lower() in word2vec.wv.vocab and word.lower() not in vocab:
-                vocab.append(word.lower())
-    print(len(vocab))
-
-    vocab_size = len(vocab) + 4
-    embed_size = 50
-    word2id = {w:i+4 for i,w in enumerate(vocab)}
-    id2word = {i+4: w for i,w in enumerate(vocab)}
-    word2id["<Sos>"] = 0
-    word2id["<Eos>"] = 1
-    word2id["<Unk>"] = 2
-    word2id["<Pad>"] = 3
-    id2word[0] = "<Sos>"
-    id2word[1] = "<Eos>"
-    id2word[2] = "<Unk>"
-    id2word[3] = "<Pad>"
-    word_embeddings = np.random.rand(vocab_size, embed_size)
-    #Sos = np.zeros([1,embed_size])
-    #Eos = np.ones([1,embed_size])
-    #Unk = np.zeros([1,embed_size])
-
-    for word in vocab:
-        word_embeddings[word2id[word]] = word2vec[word]
-
-    pickle.dump(word_embeddings, open("word_embeddings.pickle", "wb"))
-    pickle.dump(word2id, open("word2id.pickle", "wb"))
-    pickle.dump(id2word, open("id2word.pickle", "wb"))
-    pickle.dump(vocab_size, open("vocab_size.pickle", "wb"))
-    pickle.dump(vocab, open("vocab.pickle","wb"))
-
-    print("construct word embedding done")
-
-
-
-"""
-vari_enc_outputs = tf.zeros(tf.shape(encoder_output))
-for i in range(batch_size):
-    for j in range(2):
-        u_output = tf.layers.dense(encoder_output[i,j,:],latent_size,tf.nn.sigmoid,name = "output_var_u")
-        s_output = tf.layers.dense(encoder_output[i,j,:],latent_size,tf.nn.relu, name = "output_var_s")
-        z_output = u_output + s_output * tf.truncated_normal(tf.shape(u_output),1,-1)
-        vari_enc_outputs[i,j,:] = z_output
-"""
-"""
-z_list = []
-for i in range(batch_size):
-    b_z = tf.tile([z[i]],[dec_max_len,1])
-    z_list.append(b_z)
-
-z_concat = tf.stack(z_list)
-dec_input = tf.concat((dec_embed, z_concat),axis = 2)
-"""
+vocab_size = 20000 
+max_len = 15
+latent_size = 100
 
 with tf.variable_scope("Training"):
 
-    embed_size = 50
     
     dec_max_len = tf.placeholder(tf.int32, shape = [],name = '1')
     enc_sent = tf.placeholder(tf.int32, shape = [None, None], name  = '2')
@@ -97,12 +35,11 @@ with tf.variable_scope("Training"):
 
     
     
-
-    hid_units = 50
+    word_embeddings = tf.get_variable("word_embeds",[vocab_size, embed_size])
+    
 
     initializer = tf.random_uniform_initializer(-0.1, 0.1)
 
-    word_embeddings = tf.cast(word_embeddings,tf.float32)
     #tf.Variable(tf.random_uniform([vocab_size,embed_size],1,-1))
 
     dec_embed = tf.nn.embedding_lookup(word_embeddings, dec_sent)
@@ -114,7 +51,7 @@ with tf.variable_scope("Training"):
     # in this batch, enc_len will be check, no matter emc_embed length(shape)
     encoder_output, encoder_final_state = tf.nn.dynamic_rnn(encoder_cell, enc_embed, dtype = tf.float32,sequence_length = enc_len)
 
-    latent_size = 50
+    
 
     u = tf.layers.dense(encoder_final_state.c,latent_size,tf.nn.sigmoid,name = "state_latent_u",reuse = tf.AUTO_REUSE)
     s = tf.layers.dense(encoder_final_state.c,latent_size,tf.nn.sigmoid,name = "state_latent_s",reuse = tf.AUTO_REUSE)
@@ -220,101 +157,75 @@ with tf.variable_scope("Training",reuse = True):
 #infer_ind = infer_outputs.sample_id
 
 
-def next_batch(data, batch_size):
-    for i in range(0, len(data) - batch_size, batch_size):
-        yield data[i:i+batch_size]
 
-def max_batch_len(batch):
-    batch_len = []
-    
-    for sent in batch:
-        if len(word_tokenize(sent)) == 0:
-            batch_len.append(5)
-        else:
-            batch_len.append(len(word_tokenize(sent)))
-        
-    return batch_len, max(batch_len)
-
-def batch_encode(batch, batch_size, inp_max_len, vocab, word2id, pid):
-    enc_inp = pid * np.ones([batch_size,inp_max_len])
-    for n, joke in enumerate(batch):
-        joke_words = word_tokenize(joke)
-        if len(joke_words) == 0:
-            joke_words = word_tokenize('let me make a joke')
-        for iw, word in enumerate(joke_words):
-            if word.lower() in vocab:
-                enc_inp[n,iw] = word2id[word.lower()]
-            else:
-                enc_inp[n,iw] = (word2id["<Unk>"])
-    return enc_inp
-
+step = 1
 with tf.Session() as sess:
     saver = tf.train.Saver()
-    model_path = './saved_with_scope/NML.ckpt'
-    model_dir = 'saved_with_scope'
+    model_path = './saved_with_imdb/NML.ckpt'
+    model_dir = 'saved_with_imdb'
 
     if os.path.isdir(model_dir):
         print("Loading previous trained model ...")
         saver.restore(sess, model_path)
     else:
         sess.run(tf.global_variables_initializer())
+        
         print("global initialing")
     
-    joke_data = open("shorterjokes.txt",'r').read().split('\n')
-    vocab.append("what's")
-    epochs = 3
+    data = DataFlow(vocab_size, max_len, batch_size)
+    iterator, total_len = data.load()
 
     for epoch in range(epochs):
-        random.shuffle(joke_data)
-        generator = next_batch(joke_data,batch_size)
-        total_schedule = epochs * int(len(joke_data) / batch_size)
-        
-        for step, jokes in enumerate(generator):
-        
-            
-            schedule =  epoch/epochs + step/total_schedule
-            q_inp_len, q_inp_max_len = max_batch_len(jokes)
-            q_dec_len = q_inp_len + np.ones_like(q_inp_len)
-            q_enc_inp = batch_encode(jokes, batch_size, q_inp_max_len, vocab, word2id, 3)
-            
-            sos_pad = np.zeros([batch_size,1])
-            eos_pad = np.ones([batch_size,1])
-            dec_outp = np.concatenate((q_enc_inp,eos_pad), axis = 1)
-            dec_inp = np.concatenate((sos_pad,q_enc_inp), axis = 1)
-            
+
+        total_schedule = epochs * int(total_len / batch_size)
+        sess.run(iterator.initializer)
+        while True:
+            try:
+                enc_inp, dec_inp, dec_tar, enc_label = sess.run(iterator.get_next())
+                
+                enc_length, dec_length = sess.run([tf.count_nonzero(enc_inp, axis = 1),
+                                             tf.count_nonzero(dec_inp, axis = 1)])
+                
+                enc_label = sess.run(tf.one_hot(enc_label, depth = 2))       
+
+                schedule =  epoch/epochs + step/total_schedule
+                
             # trianing graph
-            t_ind, t_loss,  _ = sess.run([train_ind, train_loss, train_step],
-                                                feed_dict = {enc_sent : q_enc_inp,
-                                                             dec_sent : dec_inp,
-                                                             tar_sent : dec_outp,
-                                                             enc_len : q_inp_len,
-                                                             dec_len : q_dec_len,
-                                                             dec_max_len : q_inp_max_len+1,
-                                                             schedule_kl_weight : schedule})
-            """
-            if step % 50 == 0:
                 
-                for tra, truth in zip(t_ind, dec_outp):
-                    print("truth: " + ' '.join([id2word[id] for id in truth]))
-                    print("tra: " + ' '.join([id2word[id] for id in tra]))
+                t_ind, t_loss,  _ = sess.run([train_ind, train_loss, train_step],
+                                                    feed_dict = {enc_sent : enc_inp,
+                                                                 dec_sent : dec_inp,
+                                                                 tar_sent : dec_tar,
+                                                                 enc_len : enc_length,
+                                                                 dec_len : dec_length,
+                                                                 dec_max_len : max(dec_length),
+                                                                 schedule_kl_weight : schedule})
+            
+                if step % 5 == 0:
+                    print("step: {}, kl_w: {}".format(step,schedule))
+                    for tra, truth in zip(t_ind, dec_tar):
+                        print("tru: " + ' '.join([data.id2word[id] for id in truth]))
+                        print("tra: " + ' '.join([data.id2word[id] for id in tra]))
+                
+                
+                step += 1
+                # inference graph
+                """
+                i_ind = sess.run(infer_ind,feed_dict = {enc_sent : q_enc_inp,
+                                                         dec_sent : dec_inp,
+                                                         tar_sent : dec_outp,
+                                                         enc_len : q_inp_len,
+                                                         dec_max_len : q_inp_max_len+1,
+                                                         schedule_kl_weight : schedule})
+                if step % 5 == 0:
                     
-            
-            
-            # inference graph
-            """
-            i_ind = sess.run(infer_ind,feed_dict = {enc_sent : q_enc_inp,
-                                                     dec_sent : dec_inp,
-                                                     tar_sent : dec_outp,
-                                                     enc_len : q_inp_len,
-                                                     dec_max_len : q_inp_max_len+1,
-                                                     schedule_kl_weight : schedule})
-            if step % 5 == 0:
+                    for inf, truth in zip(i_ind, dec_tar):
+                        print("truth: " + ' '.join([id2word[id] for id in truth]))
+                        print("inf: " + ' '.join([id2word[id] for id in inf]))                      
                 
-                for inf, truth in zip(i_ind, dec_outp):
-                    print("truth: " + ' '.join([id2word[id] for id in truth]))
-                    print("inf: " + ' '.join([id2word[id] for id in inf]))                      
-            
-            
+                """
+            except tf.errors.OutOfRangeError:
+                    break
 
     save_path = saver.save(sess, model_path)
     print("Model saved in file: %s" % save_path)
