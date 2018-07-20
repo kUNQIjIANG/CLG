@@ -27,10 +27,10 @@ class DataFlow:
 		enc_inp = x[:, 1:]
 		dec_inp = x
 		dec_tar = np.concatenate((x[:,1:], np.full([x.shape[0],1],self.word2id['<eos>'])), axis = -1)
-
+		
 		dataPipe = tf.data.Dataset.from_tensor_slices((enc_inp,dec_inp,dec_tar,y))
 		dataPipe = dataPipe.shuffle(len(enc_inp)).batch(self.batch_size)
 		iterator = dataPipe.make_initializable_iterator()
 
-		return iterator 
+		return iterator, len(enc_inp)
 
