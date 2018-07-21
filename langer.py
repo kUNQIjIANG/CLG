@@ -12,7 +12,7 @@ from tensorflow.contrib.seq2seq.python.ops import beam_search_decoder
 
 hid_units = 100
 batch_size = 32 
-epochs = 5
+epochs = 1
 c_size = 2
 beam_width = 5
 embed_size = 300
@@ -99,8 +99,10 @@ with tf.variable_scope("Training"):
     train_logits = train_outputs.rnn_output
     train_ind = train_outputs.sample_id
 
-    seq_loss = tf.contrib.seq2seq.sequence_loss(train_logits, tar_sent, seq_mask,average_across_timesteps = False,average_across_batch = True)
-    kl_loss = 0.5 * (tf.reduce_sum(tf.square(s) + tf.square(u) - tf.log(tf.square(s))) - latent_size)
+    seq_loss = tf.contrib.seq2seq.sequence_loss(train_logits, tar_sent, seq_mask,
+                    average_across_timesteps = False,average_across_batch = True)
+    
+    kl_loss = 0.5 * tf.reduce_sum(tf.square(s) + tf.square(u) - tf.log(tf.square(s)) - 1) / batch_size
     train_loss = seq_loss + schedule_kl_weight * kl_loss
     
     optimizer = tf.train.AdamOptimizer(1e-3)
@@ -174,10 +176,10 @@ with tf.Session() as sess:
     
     data = DataFlow(vocab_size, max_len, batch_size)
     iterator, total_len = data.load()
+    total_schedule = epochs * int(total_len / batch_size)
 
     for epoch in range(epochs):
 
-        total_schedule = epochs * int(total_len / batch_size)
         sess.run(iterator.initializer)
         while True:
             try:
@@ -188,11 +190,11 @@ with tf.Session() as sess:
                 
                 enc_label = sess.run(tf.one_hot(enc_label, depth = 2))       
 
-                schedule =  epoch/epochs + step/total_schedule
+                schedule =  step/total_schedule
                 
             # trianing graph
                 
-                t_ind, t_loss,  _ = sess.run([train_ind, train_loss, train_step],
+                t_ind, _, k_loss, s_loss = sess.run([train_ind, train_step, kl_loss, seq_loss],
                                                     feed_dict = {enc_sent : enc_inp,
                                                                  dec_sent : dec_inp,
                                                                  tar_sent : dec_tar,
@@ -200,9 +202,10 @@ with tf.Session() as sess:
                                                                  dec_len : dec_length,
                                                                  dec_max_len : max(dec_length),
                                                                  schedule_kl_weight : schedule})
-            
-                if step % 5 == 0:
-                    print("step: {}, kl_w: {}".format(step,schedule))
+                
+                if step % 10 == 0:
+                    print("step: {}, kl_w: {}, kl_l: {}".format(step, schedule, k_loss))
+                    print("step: {} seq_loss: {}".format(step,s_loss))
                     for tra, truth in zip(t_ind, dec_tar):
                         print("tru: " + ' '.join([data.id2word[id] for id in truth]))
                         print("tra: " + ' '.join([data.id2word[id] for id in tra]))

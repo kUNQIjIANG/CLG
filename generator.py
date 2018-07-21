@@ -30,7 +30,7 @@ class Generator(botModel):
 			z = u + s * tf.truncated_normal(tf.shape(u),1,-1)
 			
 			sample_c = tf.contrib.distributions.OneHotCategorical(
-	            logits=tf.ones([self.batch_size, self.c_size]), dtype=tf.float32).sample()
+	            logits=tf.ones([tf.shape(z)[0], self.c_size]), dtype=tf.float32).sample()
 		
 			disentangle = tf.concat((z, sample_c), axis=-1)
 			dec_ini_state = tf.contrib.rnn.LSTMStateTuple(disentangle,disentangle)
