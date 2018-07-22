@@ -23,15 +23,16 @@ class Generator(botModel):
 
 		
 	def reconst_loss(self, dec_len, dec_max_len, dec_tar, input_embed, init_state):
-		with tf.variable_scope(self.scope,reuse=tf.AUTO_REUSE):
+		with tf.variable_scope(self.scope):
 
-			u = tf.layers.dense(init_state.c,self.z_size,tf.nn.sigmoid,name = "state_latent_u")
-			s = tf.layers.dense(init_state.c,self.z_size,tf.nn.sigmoid,name = "state_latent_s")
+			u = tf.layers.dense(init_state.c,self.z_size,tf.nn.sigmoid,name = "state_latent_u", reuse = tf.AUTO_REUSE)
+			s = tf.layers.dense(init_state.c,self.z_size,tf.nn.sigmoid,name = "state_latent_s", reuse = tf.AUTO_REUSE)
 			z = u + s * tf.truncated_normal(tf.shape(u),1,-1)
 			
 			sample_c = tf.contrib.distributions.OneHotCategorical(
 	            logits=tf.ones([tf.shape(z)[0], self.c_size]), dtype=tf.float32).sample()
-		
+			#sample_c = tf.contrib.distributions.Bernoulli(probs=[0.5]).sample([20])
+			
 			disentangle = tf.concat((z, sample_c), axis=-1)
 			dec_ini_state = tf.contrib.rnn.LSTMStateTuple(disentangle,disentangle)
 
@@ -52,10 +53,10 @@ class Generator(botModel):
 			return tf.reduce_sum(seq_loss), u, s, train_logits, train_ind, sample_c
 
 	def infer(self,init_state, inf_max_len, word_embed, given_c):
-		with tf.variable_scope(self.scope, reuse = tf.AUTO_REUSE):
+		with tf.variable_scope(self.scope, reuse = True):
 
-			inf_u = tf.layers.dense(init_state.c,self.z_size,tf.nn.sigmoid,name = "state_latent_u", reuse = tf.AUTO_REUSE)
-			inf_s = tf.layers.dense(init_state.c,self.z_size,tf.nn.sigmoid,name = "state_latent_s", reuse = tf.AUTO_REUSE)
+			inf_u = tf.layers.dense(init_state.c,self.z_size,tf.nn.sigmoid,name = "state_latent_u")
+			inf_s = tf.layers.dense(init_state.c,self.z_size,tf.nn.sigmoid,name = "state_latent_s")
 			inf_z = inf_u + inf_s * tf.truncated_normal(tf.shape(inf_u),1,-1)
 
 			disentangle = tf.concat((inf_z, given_c), axis=-1)
@@ -64,7 +65,7 @@ class Generator(botModel):
 
 			beam_decoder = beam_search_decoder.BeamSearchDecoder(cell=self.decoder_cell,
 	                                                     embedding=word_embed,
-	                                                     start_tokens=tf.fill([self.batch_size],self.sos_id),
+	                                                     start_tokens=tf.fill([tf.shape(inf_u)[0]],self.sos_id),
 	                                                     end_token=self.eos_id,
 	                                                     initial_state= tailed_init_state,
 	                                                     beam_width= self.beam_width,

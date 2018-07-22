@@ -82,7 +82,7 @@ class Trainer:
 																		dec_embed,
 																		z)
 			
-			self.kl_loss = 0.5 * tf.reduce_sum(tf.square(self.s) + tf.square(self.u) - 1 - tf.log(tf.square(self.s))) / self.batch_size
+			self.kl_loss = 0.5 * tf.reduce_sum(tf.square(self.s) + tf.square(self.u) - 1 - tf.log(tf.square(self.s))) / tf.to_float(tf.shape(enc_embed)[0])
 
 			self.vae_loss = self.rec_loss + self.kl_weight*self.kl_loss
 			self.vae_step = self.optimize(self.vae_loss)
@@ -91,7 +91,7 @@ class Trainer:
 			# for distriminator 
 			logits = tf.reshape(logits, [-1, self.vocab_size])
 			logit2word_embeds = tf.matmul(logits, self.word_embed)
-			logit_encode = tf.reshape(logit2word_embeds, [self.batch_size,-1,self.embed_size])
+			logit_encode = tf.reshape(logit2word_embeds, [tf.shape(enc_embed)[0],-1,self.embed_size])
 
 			_, self.c_loss, self.syn_acc = self.discriminator.discrimi_loss(logit_encode, self.dec_len, self.sample_c)
 		
@@ -110,7 +110,7 @@ class Trainer:
 			self.train_step = self.optimize(self.generator_loss)
 
 	def build_infer_graph(self):
-		with tf.variable_scope("infer",reuse = tf.AUTO_REUSE):
+		with tf.variable_scope("wake",reuse = tf.AUTO_REUSE):
 
 			enc_embed = tf.nn.embedding_lookup(self.word_embed, self.enc_input)
 			
