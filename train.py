@@ -18,12 +18,13 @@ sos_id = 0
 eos_id = 1
 vocab_size = 20000
 max_len = 15
-save_path = './d_saved/'
+save_path = './Dense_saved/'
 
 test = ['this is one of the best movies i think',
         'i never saw a image as terrible as this',
         'first time to see such a great movie',
-        'the boring film is a problem for me']
+        'the boring film is a problem for me',
+        'superb movie highly recommend 5 out of 5']
 
 with tf.Session() as sess:
     word_embeds = tf.get_variable("word_embeds",[vocab_size, embed_size])
@@ -42,12 +43,14 @@ with tf.Session() as sess:
         for j,word in enumerate(sen.split()):
             test_inp[i,j] = data.word2id[word]
 
+    
     given_c = np.array([[1,0],
                         [0,1],
                         [1,0],
-                        [0,1]])
-    
-    if os.path.isdir('d_saved'):
+                        [0,1],
+                        [1,0]])
+
+    if os.path.isdir('Dense_saved'):
         print("loading model from {}".format(save_path))
         trainer.saver.restore(sess,save_path)
         #trainer.encoder.load(sess)
@@ -74,11 +77,11 @@ with tf.Session() as sess:
                 
                 # pre-trian discriminator with supervised label
                 kl_weight = step / total_step
-                if step < 2000:
+                if step < 2000 :
                     vae_loss, vae_rec, vae_kl, vae_sen, vae_u, vae_s = trainer.vaeTrain(sess, enc_inp, enc_len, dec_inp, dec_len, dec_tar,kl_weight)
                     pre_loss, pre_discri_acc = trainer.preTrain(sess, enc_inp, enc_len, enc_label)
 
-                    if step % 20 == 0:
+                    if step % 200 == 0:
 
                         inf_ids = trainer.inference(sess,test_inp, test_len, given_c)
                         for tr, truth in zip(inf_ids, test_inp):
@@ -105,7 +108,7 @@ with tf.Session() as sess:
 
                     # trianing output
                 
-                    if step % 20 == 0:
+                    if step % 200 == 0:
                         
                         inf_ids = trainer.inference(sess,test_inp, test_len, given_c)
                         for tr, truth in zip(inf_ids, test_inp):

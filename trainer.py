@@ -106,7 +106,8 @@ class Trainer:
 			#kl_weight = 1 * tf.sigmoid((10/6000)*(tf.to_float(self.step) - tf.constant(6000/2)))
 
 			weight = tf.constant(0.1)
-			self.generator_loss = self.rec_loss + weight*self.c_loss + weight*self.z_loss + self.kl_weight*self.kl_loss
+			c_weight = tf.constant(1.0)
+			self.generator_loss = self.rec_loss + c_weight*self.c_loss + weight*self.z_loss + self.kl_weight*self.kl_loss
 			self.train_step = self.optimize(self.generator_loss)
 
 	def build_infer_graph(self):
