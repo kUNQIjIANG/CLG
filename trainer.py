@@ -53,7 +53,9 @@ class Trainer:
 
 			fake_embed = tf.nn.embedding_lookup(self.word_embed, self.fake_input)
 
-			_, self.pre_loss, self.pre_discri_acc = self.discriminator.discrimi_loss(enc_embed, self.enc_len, self.enc_labels)
+			supv_c_logits, self.pre_loss, self.pre_discri_acc = self.discriminator.discrimi_loss(enc_embed, self.enc_len, self.enc_labels)
+			self.supv_c = tf.argmax(supv_c_logits,axis = 1)
+			
 			self.pre_train_step = self.optimize(self.pre_loss)
 
 			self.fake_logits, self.fake_loss, self.fake_discri_acc = self.discriminator.discrimi_loss(fake_embed, self.fake_len, self.fake_labels)
@@ -70,7 +72,7 @@ class Trainer:
 		with tf.variable_scope("wake", reuse = tf.AUTO_REUSE):
 			enc_embed = tf.nn.embedding_lookup(self.word_embed, self.enc_input)
 			dec_embed = tf.nn.embedding_lookup(self.word_embed, self.dec_input)
-
+			# ----------------------VAE Train------------------------------------- #
 			self.dec_max_len = tf.reduce_max(self.dec_len)
 
 			z = self.encoder.encode(enc_embed,self.enc_len)
@@ -87,14 +89,15 @@ class Trainer:
 			self.vae_loss = self.rec_loss + self.kl_weight*self.kl_loss
 			self.vae_step = self.optimize(self.vae_loss)
 			
+			# ------------------------- Wake Train--------------------------------- #
 			# transfer generator decoder output logits into soft-inputs
 			# for distriminator 
 			logits = tf.reshape(logits, [-1, self.vocab_size])
 			logit2word_embeds = tf.matmul(logits, self.word_embed)
 			logit_encode = tf.reshape(logit2word_embeds, [tf.shape(enc_embed)[0],-1,self.embed_size])
-
-			_, self.c_loss, self.syn_acc = self.discriminator.discrimi_loss(logit_encode, self.dec_len, self.sample_c)
-		
+ 
+			c_logits, self.c_loss, self.syn_acc = self.discriminator.discrimi_loss(logit_encode, self.dec_len, self.sample_c)
+			self.pred_c = tf.argmax(c_logits, axis = -1)
 		
 		# length of generated sentence ?
 
@@ -128,24 +131,29 @@ class Trainer:
 		return infer_ids
 
 	def vaeTrain(self,sess,enc_input,enc_len,dec_input,dec_len,dec_tar,kl_weight):
-		_, vae_loss, rec_loss, vae_kl_loss, vae_sen, mean, sig  = sess.run([self.vae_step, self.vae_loss, self.rec_loss,
-														 			self.kl_loss, self.gen_sen, self.u, self.s],
-																	 {self.enc_input : enc_input,
-																		self.enc_len : enc_len,
-																		self.dec_input : dec_input,
-																		self.dec_len : dec_len,
-																		self.dec_tar : dec_tar,
-																		self.kl_weight : kl_weight})
+		_, vae_loss, rec_loss, vae_kl_loss, vae_sen, mean, sig, sample_c  \
+							= sess.run([self.vae_step, self.vae_loss, self.rec_loss,
+							 			self.kl_loss, self.gen_sen, self.u, self.s,
+							 			 self.sample_c],
+										 {self.enc_input : enc_input,
+											self.enc_len : enc_len,
+											self.dec_input : dec_input,
+											self.dec_len : dec_len,
+											self.dec_tar : dec_tar,
+											self.kl_weight : kl_weight})
 		#print("generator loss: %2f" % loss)
-		return vae_loss, rec_loss, vae_kl_loss, vae_sen, mean, sig
+		return vae_loss, rec_loss, vae_kl_loss, vae_sen, mean, sig, sample_c
 
 	def wakeTrain(self,sess,enc_input,enc_len,dec_input,dec_len,dec_tar,kl_weight):
 
-		_, loss, gen_ids, gen_labels, c_loss, z_loss, kl_loss, rec_loss, syn_acc, u, s = sess.run([self.train_step, self.generator_loss,
+		_, loss, gen_ids, gen_labels, c_loss, z_loss, \
+		 kl_loss, rec_loss, syn_acc, u, s, pred_c = \
+		 				   sess.run([self.train_step, self.generator_loss,
 									 self.gen_sen, self.sample_c,
 									 self.c_loss, self.z_loss,
 									 self.kl_loss, self.rec_loss,
-									 self.syn_acc, self.u, self.s],
+									 self.syn_acc, self.u, self.s,
+									 self.pred_c],
 									 {self.enc_input : enc_input,
 										self.enc_len : enc_len,
 										self.dec_input : dec_input,
@@ -153,7 +161,7 @@ class Trainer:
 										self.dec_tar : dec_tar,
 										self.kl_weight : kl_weight})
 		#print("generator loss: %2f" % loss)
-		return gen_ids, gen_labels, c_loss, z_loss, kl_loss, rec_loss, syn_acc, u, s
+		return gen_ids, gen_labels, c_loss, z_loss, kl_loss, rec_loss, syn_acc, u, s, pred_c
 		#return gen_sen, sample_c
 
 	def mutinfo_loss(self, z_mean, z_sig, new_z):
@@ -171,16 +179,18 @@ class Trainer:
 		return train_step
 
 	def preTrain(self, sess, pre_input, pre_len, pre_labels):
-		_, pre_loss, pre_acc = sess.run([self.pre_train_step, self.pre_loss, self.pre_discri_acc],
+		_, pre_loss, pre_acc, supv_c = sess.run([self.pre_train_step,
+							 self.pre_loss, self.pre_discri_acc,self.supv_c],
 								 {self.enc_input : pre_input,
 								  self.enc_len : pre_len,
 								  self.enc_labels : pre_labels})
 
 		#print("sleep loss: %2f " % sleep_loss)
-		return pre_loss, pre_acc 
+		return pre_loss, pre_acc, supv_c
 
 	def sleepTrain(self, sess, real_input, real_len, real_labels, fake_input, fake_len, fake_labels):
-		_, sleep_loss, sleep_acc = sess.run([self.sleep_train_step, self.sleep_loss, self.sleep_acc],
+		_, sleep_loss, sleep_acc, supv_c = sess.run([self.sleep_train_step,
+								  self.sleep_loss, self.sleep_acc,self.supv_c],
 								 {self.enc_input : real_input,
 								  self.enc_len : real_len,
 								  self.enc_labels : real_labels,
@@ -189,4 +199,4 @@ class Trainer:
 								  self.fake_labels : fake_labels})
 
 		#print("sleep loss: %2f " % sleep_loss)
-		return sleep_loss, sleep_acc 
+		return sleep_loss, sleep_acc, supv_c 

@@ -10,7 +10,7 @@ from data import DataFlow
 
 hid_units = 100
 batch_size = 32 
-epochs = 2
+epochs = 1
 c_size = 2
 beam_width = 5
 embed_size = 300
@@ -23,8 +23,9 @@ save_path = './Dense_saved/'
 test = ['this is one of the best movies i think',
         'i never saw a image as terrible as this',
         'first time to see such a great movie',
-        'the boring film is a problem for me',
-        'superb movie highly recommend 5 out of 5']
+        'that boring film is a problem for me',
+        'superb movie highly recommend 5 out of 5',
+        'the quality of this cast is a absolute joke']
 
 with tf.Session() as sess:
     word_embeds = tf.get_variable("word_embeds",[vocab_size, embed_size])
@@ -48,7 +49,8 @@ with tf.Session() as sess:
                         [0,1],
                         [1,0],
                         [0,1],
-                        [1,0]])
+                        [1,0],
+                        [0,1]])
 
     if os.path.isdir('Dense_saved'):
         print("loading model from {}".format(save_path))
@@ -77,38 +79,39 @@ with tf.Session() as sess:
                 
                 # pre-trian discriminator with supervised label
                 kl_weight = step / total_step
-                if step < 2000 :
-                    vae_loss, vae_rec, vae_kl, vae_sen, vae_u, vae_s = trainer.vaeTrain(sess, enc_inp, enc_len, dec_inp, dec_len, dec_tar,kl_weight)
-                    pre_loss, pre_discri_acc = trainer.preTrain(sess, enc_inp, enc_len, enc_label)
+                if step < 800:
+                    vae_loss, vae_rec, vae_kl, vae_sen, vae_u, vae_s, sample_c = trainer.vaeTrain(sess,
+                                     enc_inp, enc_len, dec_inp, dec_len, dec_tar,kl_weight)
+                    pre_loss, pre_discri_acc, supv_c = trainer.preTrain(sess, enc_inp, enc_len, enc_label)
 
-                    if step % 200 == 0:
-
+                    if step % 50 == 0:
                         inf_ids = trainer.inference(sess,test_inp, test_len, given_c)
                         for tr, truth in zip(inf_ids, test_inp):
                             print("step: {} ".format(step) + "tru: " + ' '.join([data.id2word[id] for id in truth]))
                             print("step: {} ".format(step) + "inf: " + ' '.join([data.id2word[id] for id in tr]))         
 
-                        print("epoch lenght: {}".format(total_len/batch_size))
                         print("step: {}, kl_w: {}, vae_u: {}, vae_s: {}".format(step,kl_weight,vae_u,vae_s))
                         print("step: {}, vae_loss : {}, vae_kl : {}, vae_rec: {}".format(step,vae_loss, vae_kl, vae_rec))
                         print("step: {}, pre-train loss : {}, accuracy : {}".format(step,pre_loss, pre_discri_acc))
-                        for tr, truth in zip(vae_sen, dec_tar):
-                            print("step: {} ".format(step) + "tru: " + ' '.join([data.id2word[id] for id in truth]))
-                            print("step: {} ".format(step) + "vae: " + ' '.join([data.id2word[id] for id in tr]))          
+                        for tr, truth, sv_t, sv_c, spl_c in zip(vae_sen, dec_tar, enc_label, supv_c, sample_c):
+                            print("step: {} ".format(step) + "tru: " + ' '.join([data.id2word[id] for id in truth]) + '|| c: {} t: {}'.format(sv_c,np.argmax(sv_t)))
+                            print("step: {} ".format(step) + "vae: " + ' '.join([data.id2word[id] for id in tr]) + '|| sample_c: {}'.format(np.argmax(spl_c)))          
                 else:
                     # wake phase
-                    gen_sen, gen_label, c_loss,z_loss,kl_loss, rec_loss, syn_acc, mean, sig = trainer.wakeTrain(sess, enc_inp, enc_len, dec_inp, dec_len, dec_tar,kl_weight)
+                    gen_sen, gen_label, c_loss,z_loss,kl_loss, rec_loss,\
+                     syn_acc, mean, sig, pred_c =  trainer.wakeTrain(sess, enc_inp,
+                      enc_len, dec_inp, dec_len, dec_tar,kl_weight)
                     #con_sen = np.concatenate((enc_inp, gen_sen[:,:-1]), axis = 0)
                     #con_lab = np.concatenate((enc_label, gen_label), axis = 0)
                     #con_len = np.concatenate((enc_len,enc_len), axis = 0)
                     
                     # sleep phase
-                    sleep_loss, sleep_acc = trainer.sleepTrain(sess, enc_inp, enc_len, enc_label, gen_sen, dec_len, gen_label)
+                    sleep_loss, sleep_acc, supv_c = trainer.sleepTrain(sess,
+                     enc_inp, enc_len, enc_label, gen_sen, dec_len, gen_label)
                     
-
                     # trianing output
                 
-                    if step % 200 == 0:
+                    if step % 50 == 0:
                         
                         inf_ids = trainer.inference(sess,test_inp, test_len, given_c)
                         for tr, truth in zip(inf_ids, test_inp):
@@ -119,9 +122,9 @@ with tf.Session() as sess:
                         print("step: {}, kl_weight: {}, c_loss: {}, z_loss: {}".format(step,kl_weight,c_loss,z_loss))
                         print("step: {}, kl_loss: {} rec_loss: {}, syn_acc: {}".format(step,kl_loss,rec_loss, syn_acc))
                         print("step: {}, sleep loss : {}, accuracy : {}".format(step, sleep_loss, sleep_acc))
-                        for tr, truth in zip(gen_sen, dec_tar):
-                            print("step: {} ".format(step) + "tru: " + ' '.join([data.id2word[id] for id in truth]))
-                            print("step: {} ".format(step) + "tra: " + ' '.join([data.id2word[id] for id in tr])) 
+                        for tr, truth, sv_c, gen_c, sv_t in zip(gen_sen, dec_tar, supv_c, pred_c, enc_label):
+                            print("step: {} ".format(step) + "tru: " + ' '.join([data.id2word[id] for id in truth]) + ' c: {} t: {}'.format(sv_c,np.argmax(sv_t)))
+                            print("step: {} ".format(step) + "tra: " + ' '.join([data.id2word[id] for id in tr]) + ' c: {}'.format(gen_c)) 
                     
                     """
                     # inference output 
