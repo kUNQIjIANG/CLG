@@ -1,6 +1,5 @@
 import tensorflow as tf 
 from botModel import botModel
-from tensorflow.python.layers.core import Dense
 from tensorflow.contrib.seq2seq.python.ops import beam_search_decoder
 
 class Generator(botModel):
@@ -11,7 +10,7 @@ class Generator(botModel):
 		self.batch_size = batch_size
 		self.vocab_size = vocab_size
 		self.c_size = c_size
-		self.z_size = self.hid_units - self.c_size
+		
 		self.beam_width = beam_width
 		self.sos_id = sos_id
 		self.eos_id = eos_id
@@ -19,15 +18,14 @@ class Generator(botModel):
 
 	def build_graph(self):
 		with tf.variable_scope(self.scope):
+
 			self.decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.hid_units, state_is_tuple=True)
-			self.u_layer = tf.layers.Dense(self.z_size,name = 'u_layer')
-			self.s_layer = tf.layers.Dense(self.z_size,name = 's_layer')
+			
+			self.outp_layer = tf.layers.Dense(self.vocab_size,name = 'outp_layer')
 		
-	def reconst_loss(self, dec_len, dec_max_len, dec_tar, input_embed, init_state):
+	def reconst_loss(self, dec_len, dec_max_len, dec_tar, input_embed, u, s):
 		with tf.variable_scope(self.scope):
 
-			u = self.u_layer(init_state.c)
-			s = self.s_layer(init_state.c)
 			z = u + s * tf.truncated_normal(tf.shape(u),1,-1)
 			
 			sample_c = tf.contrib.distributions.OneHotCategorical(
@@ -42,7 +40,7 @@ class Generator(botModel):
 			
 			self.train_decoder = tf.contrib.seq2seq.BasicDecoder(self.decoder_cell, self.train_helper,
 																initial_state = dec_ini_state,
-																output_layer = Dense(self.vocab_size))
+																output_layer = self.outp_layer)
 			self.train_outputs, self.final_state, _ = tf.contrib.seq2seq.dynamic_decode(self.train_decoder)
 	    														
 			seq_mask = tf.cast(tf.sequence_mask(dec_len, dec_max_len), tf.float32)
@@ -51,13 +49,11 @@ class Generator(botModel):
 			seq_loss = tf.contrib.seq2seq.sequence_loss(train_logits, dec_tar, seq_mask,
 	    													average_across_timesteps = False,
 	    													average_across_batch = True)
-			return tf.reduce_sum(seq_loss), u, s, train_logits, train_ind, sample_c
+			return tf.reduce_sum(seq_loss), train_logits, train_ind, sample_c
 
-	def infer(self,init_state, inf_max_len, word_embed, given_c):
+	def infer(self, inf_max_len, word_embed, given_c, inf_u, inf_s):
 		with tf.variable_scope(self.scope, reuse = True):
 
-			inf_u = self.u_layer(init_state.c)
-			inf_s = self.s_layer(init_state.c)
 			inf_z = inf_u + inf_s * tf.truncated_normal(tf.shape(inf_u),1,-1)
 
 			disentangle = tf.concat((inf_z, given_c), axis=-1)
@@ -70,7 +66,7 @@ class Generator(botModel):
 	                                                     end_token=self.eos_id,
 	                                                     initial_state= tailed_init_state,
 	                                                     beam_width= self.beam_width,
-	                                                     output_layer=Dense(self.vocab_size))
+	                                                     output_layer=self.outp_layer)
 			
 			infer_outputs, i_final_context_state, _ = tf.contrib.seq2seq.dynamic_decode(beam_decoder,maximum_iterations = inf_max_len)
 

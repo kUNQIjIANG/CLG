@@ -12,6 +12,8 @@ class Discriminator(botModel):
 		with tf.variable_scope(self.scope):
 
 			self.encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.hid_units)
+			
+			#regularizer = tf.contrib.layers.l2_regularizer(scale=0.1)
 			self.dropout_layer = tf.layers.Dropout(0.7,name = 'dropout_layer')
 			self.tanh_layer = tf.layers.Dense(100,tf.tanh,name = 'tanh_layer')
 			self.final_layer = tf.layers.Dense(self.c_size,name = 'final_layer')
