@@ -27,27 +27,21 @@ class Trainer:
 		self.saver = tf.train.Saver()
 
 	def build_placehoders(self):
-		#with tf.variable_scope("wake", reuse = tf.AUTO_REUSE):
+		
 		self.kl_weight = tf.placeholder(tf.float32,shape = [], name = 'kl_weight')
 		self.enc_input = tf.placeholder(tf.int32,shape = [None,None], name = 'enc_input')
 		self.enc_len = tf.placeholder(tf.int32, shape = [None], name = 'enc_len')
 		self.dec_len = tf.placeholder(tf.int32, shape = [None], name = 'dec_len')
-
 		self.dec_tar = tf.placeholder(tf.int32, shape = [None, None], name = "dec_tar")
 		self.dec_input = tf.placeholder(tf.int32, shape = [None, None], name = "dec_input")
-
 		self.enc_labels = tf.placeholder(tf.int32, shape = [None, None], name = 'enc_labels')
-		
 		self.fake_input = tf.placeholder(tf.int32,shape = [None,None], name = 'fake_input')
 		self.fake_len = tf.placeholder(tf.int32, shape = [None], name = 'fake_len')
 		self.fake_labels = tf.placeholder(tf.int32, shape = [None, None], name = 'fake_labels')
-
 		self.given_c = tf.placeholder(tf.float32, shape = [None, None], name = 'givenc_c')
 
-
 	def build_sleep_graph(self):
-		#with tf.variable_scope("sleep", reuse = tf.AUTO_REUSE):
-
+		
 		enc_embed = tf.nn.embedding_lookup(self.word_embed, self.enc_input)
 
 		fake_embed = tf.nn.embedding_lookup(self.word_embed, self.fake_input)
@@ -68,7 +62,7 @@ class Trainer:
 		self.sleep_train_step = self.optimize(self.sleep_loss)
 
 	def build_wake_graph(self):
-		#with tf.variable_scope("wake", reuse = tf.AUTO_REUSE):
+		
 		enc_embed = tf.nn.embedding_lookup(self.word_embed, self.enc_input)
 		dec_embed = tf.nn.embedding_lookup(self.word_embed, self.dec_input)
 		# ----------------------VAE Train------------------------------------- #
@@ -109,9 +103,9 @@ class Trainer:
 		
 		#kl_weight = 1 * tf.sigmoid((10/6000)*(tf.to_float(self.step) - tf.constant(6000/2)))
 
-		weight = tf.constant(0.1)
+		z_weight = tf.constant(0.1)
 		c_weight = tf.constant(0.1)
-		self.generator_loss = self.vae_loss + c_weight*self.c_loss + weight*self.z_loss
+		self.generator_loss = self.vae_loss + c_weight*self.c_loss + z_weight*self.z_loss
 		self.wake_generator_step = self.optimize_with_scope(self.generator_loss,self.generator.scope)
 		self.wake_encoder_step = self.optimize_with_scope(self.vae_loss,self.encoder.scope)
 

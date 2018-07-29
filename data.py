@@ -21,9 +21,14 @@ class DataFlow:
 		x = np.concatenate((x_train,x_test))
 		y = np.concatenate((y_train,y_test))
 
-		x = tf.keras.preprocessing.sequence.pad_sequences(x, self.max_len + 1,
+		post_x = tf.keras.preprocessing.sequence.pad_sequences(x, self.max_len + 1,
 													truncating = 'post', padding = 'post')
-	
+		pre_x = tf.keras.preprocessing.sequence.pad_sequences(x, self.max_len + 1,
+													truncating = 'pre', padding = 'post')
+
+		x = np.concatenate((pre_x,post_x))
+		y = np.concatenate((y,y))
+		
 		enc_inp = x[:, 1:]
 		dec_inp = x
 		dec_tar = np.concatenate((x[:,1:], np.full([x.shape[0],1],self.word2id['<eos>'])), axis = -1)

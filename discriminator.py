@@ -36,7 +36,7 @@ class Discriminator(botModel):
 			tanh = self.tanh_layer(dropout)
 			self.pred_c = self.final_layer(tanh)
 			
-			self.cross_entropy = tf.reduce_sum(tf.nn.softmax_cross_entropy_with_logits(labels = true_labels, logits = self.pred_c))
+			self.cross_entropy = tf.reduce_sum(tf.nn.softmax_cross_entropy_with_logits_v2(labels = tf.stop_gradient(true_labels), logits = self.pred_c))
 
 			self.correct_prediction = tf.equal(tf.argmax(true_labels, 1), tf.argmax(self.pred_c, 1))
 			self.accuracy = tf.reduce_mean(tf.cast(self.correct_prediction, tf.float32))
