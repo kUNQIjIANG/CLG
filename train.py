@@ -23,12 +23,18 @@ max_len = 15
 model_path = './saved_X/X.ckpt'
 model_dir = 'saved_X'
 """
-test = ['this is one of the best movies i think',
-        'i never saw a image as terrible as this',
-        'first time to see such a great movie',
-        'that boring film is a problem for me',
-        'superb movie highly recommend 5 out of 5',
-        'the quality of this cast is a absolute joke']
+test = ['this is one of the best movies i think it worth watching in cinema',
+        'i never saw a image as terrible as this regret to pay the my money',
+        'first time to see such a great movie and actors perform very professional',
+        'that boring film is no point to watch just do something else',
+        'this superb movie i will highly recommend and rate 5 out of 5',
+        'the quality of this cast is a absolute joke making you sleep',
+        'you have to try this french restaurant though it is expensive',
+        'this food is not like noodle and taste like shit just eat at home',
+        'the quality of the program is bad i am not satisfying about the experience',
+        'that politician always lies to people to get votes but never has actions',
+        'have a journey to china you will see amazing things going on there',
+        'computer is the most powerful weapon in this modern world']
 
 with tf.Session() as sess:
     
@@ -45,7 +51,10 @@ with tf.Session() as sess:
     test_inp = np.zeros((len(test),max(test_len)))
     for i,sen in enumerate(test):
         for j,word in enumerate(sen.split()):
-            test_inp[i,j] = data.word2id[word]
+            if word in data.word2id.keys():
+                test_inp[i,j] = data.word2id[word]
+            else:
+                test_inp[i,j] = data.word2id['<unk>']
 
     
     given_c = np.array([[1,0],
@@ -53,7 +62,13 @@ with tf.Session() as sess:
                         [1,0],
                         [0,1],
                         [1,0],
-                        [0,1]])
+                        [0,1],
+                        [1,0],
+                        [0,1],
+                        [0,1],
+                        [0,1],
+                        [1,0],
+                        [1,0]])
 
     if os.path.isdir(args.model_dir):
         print("loading model from {}".format(args.model_dir))
@@ -84,32 +99,36 @@ with tf.Session() as sess:
                 
                 kl_weight = step / total_step
 
+
                 if step < 4e5:
 
                     # VAE train
-                    vae_loss, vae_rec, vae_kl, vae_sen, vae_u, vae_s, sample_c = trainer.vaeTrain(sess,
+                    vae_loss, vae_rec, vae_kl, vae_sen, vae_u, vae_s, sample_c, train_logits = trainer.vaeTrain(sess,
                                      enc_inp, enc_len, dec_inp, dec_len, dec_tar,step)
                     
                     # pre-trian discriminator with supervised label
                     #pre_loss, pre_discri_acc, supv_c = trainer.preTrain(sess, enc_inp, enc_len, enc_label)
 
-                    if step % 50 == 0:
-                        we = sess.run(trainer.word_embed)
-                        print("step: {} we: {}".format(step,we))
+                    if step % 1 == 0:
+                        
+                        #we = sess.run(trainer.word_embed)       
+                        #print("step: {} we: {}".format(step,we))
+                        
                         inf_ids = trainer.inference(sess,test_inp, test_len, given_c)
+
+                        print("step: {}, kl_w: {}, vae_u: {}, vae_s: {}".format(step,kl_weight,vae_u,vae_s))
+                        print("step: {}, vae_loss : {}, vae_kl : {}, vae_rec: {}".format(step,vae_loss, vae_kl, vae_rec))
+
+                        """
                         for tr, truth in zip(inf_ids, test_inp):
                             print("step: {} ".format(step) + "tru: " + ' '.join([data.id2word[id] for id in truth]))
                             print("step: {} ".format(step) + "inf: " + ' '.join([data.id2word[id] for id in tr]))         
 
-                        print("step: {}, kl_w: {}, vae_u: {}, vae_s: {}".format(step,kl_weight,vae_u,vae_s))
-                        print("step: {}, vae_loss : {}, vae_kl : {}, vae_rec: {}".format(step,vae_loss, vae_kl, vae_rec))
                         #print("step: {}, pre-train loss : {}, accuracy : {}".format(step,pre_loss, pre_discri_acc))
-                        #for tr, truth, sv_t, sv_c, spl_c in zip(vae_sen, dec_tar, enc_label, supv_c, sample_c):
                         for tr, truth, sv_t, spl_c in zip(vae_sen, dec_tar, enc_label, sample_c):
-                            #print("step: {} ".format(step) + "tru: " + ' '.join([data.id2word[id] for id in truth]) + '|| pre_c: {} t: {}'.format(sv_c,np.argmax(sv_t)))
-                            print("step: {} ".format(step) + "tru: " + ' '.join([data.id2word[id] for id in truth]))
+                            print("step: {} ".format(step) + "tru: " + ' '.join([data.id2word[id] for id in truth]) + '|| t: {}'.format(np.argmax(sv_t)))
                             print("step: {} ".format(step) + "vae: " + ' '.join([data.id2word[id] for id in tr]) + '|| sample_c: {}'.format(np.argmax(spl_c)))          
-                
+                        """
                 else:
 
                     # wake phase

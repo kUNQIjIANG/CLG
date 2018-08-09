@@ -22,7 +22,7 @@ class Generator(botModel):
 
 			self.decoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.hid_units, state_is_tuple=True)
 			
-			self.outp_layer = tf.layers.Dense(self.vocab_size,name = 'outp_layer')
+			self.outp_layer = tf.layers.Dense(self.vocab_size, tf.nn.softmax, name = 'outp_layer')
 	
 	def reparm(self, mean, log_var):
 		return mean + tf.exp(0.5 * log_var) * tf.truncated_normal(tf.shape(mean))
@@ -53,8 +53,8 @@ class Generator(botModel):
 			seq_loss = tf.contrib.seq2seq.sequence_loss(train_logits, dec_tar, seq_mask,
 	    													average_across_timesteps = False,
 	    													average_across_batch = True)
-			seq_loss = tf.reduce_sum(seq_loss)/tf.to_float(tf.shape(z)[0])
-			return seq_loss, train_logits, train_ind, sample_c
+			seq_loss = tf.reduce_sum(seq_loss)
+			return seq_loss, train_logits, train_ind, sample_c, train_logits
 
 	def infer(self, inf_max_len, word_embed, given_c, inf_u, inf_log_var):
 		with tf.variable_scope(self.scope, reuse = True):

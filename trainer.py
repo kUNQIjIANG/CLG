@@ -74,7 +74,7 @@ class Trainer:
 		#enc_outputs = self.encoder.output_logits(self.enc_embed, self.enc_len)
 		
 		self.rec_loss, self.logits, \
-		 self.gen_sen, self.sample_c = self.generator.reconst_loss(self.dec_len, 
+		 self.gen_sen, self.sample_c, self.train_logits = self.generator.reconst_loss(self.dec_len, 
 																	self.dec_max_len,
 																	self.dec_tar, 
 																	dec_embed,
@@ -131,10 +131,10 @@ class Trainer:
 		return infer_ids
 
 	def vaeTrain(self,sess,enc_input,enc_len,dec_input,dec_len,dec_tar,step):
-		_, vae_loss, rec_loss, vae_kl_loss, vae_sen, mean, sig, sample_c  \
+		_, vae_loss, rec_loss, vae_kl_loss, vae_sen, mean, log_var, sample_c, train_logits \
 							= sess.run([self.vae_step, self.vae_loss, self.rec_loss,
 							 			self.kl_loss, self.gen_sen, self.u, self.log_var,
-							 			 self.sample_c],
+							 			 self.sample_c, self.train_logits],
 										 {self.enc_input : enc_input,
 											self.enc_len : enc_len,
 											self.dec_input : dec_input,
@@ -142,7 +142,7 @@ class Trainer:
 											self.dec_tar : dec_tar,
 											self.step : step})
 		#print("generator loss: %2f" % loss)
-		return vae_loss, rec_loss, vae_kl_loss, vae_sen, mean, sig, sample_c
+		return vae_loss, rec_loss, vae_kl_loss, vae_sen, mean, log_var, sample_c, train_logits
 
 	def wakeTrain(self,sess,enc_input,enc_len,dec_input,dec_len,dec_tar,step):
 
@@ -174,18 +174,21 @@ class Trainer:
 
 	def optimize(self,loss):
 		
-		gvs = self.optimizer.compute_gradients(loss)
-		clip_gvs = [(None if grad is None else tf.clip_by_value(grad,-1.0,1.0), var) for grad, var in gvs]
+		var_s = tf.trainable_variables()
+		grads = tf.gradients(loss, var_s)
+		clip_grads, _ = tf.clip_by_global_norm(grads, args.clip_norm)
+		clip_gvs = zip(clip_grads, var_s)
 		train_step = self.optimizer.apply_gradients(clip_gvs)
-		return train_step
+		
+		return train_step 
 
 	def optimize_with_scope(self,loss,scope):
 		
 		var_s = tf.trainable_variables(scope = scope)
 		grads = tf.gradients(loss, var_s)
-		clip_grads, _ = tf.clip_by_global_norm(grads,5)
-		gvs = zip(clip_grads,var_s)
-		train_step = self.optimizer.apply_gradients(gvs)
+		clip_grads, _ = tf.clip_by_global_norm(grads,args.clip_norm)
+		clip_gvs = zip(clip_grads,var_s)
+		train_step = self.optimizer.apply_gradients(clip_gvs)
 		
 		return train_step 
 

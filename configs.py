@@ -3,7 +3,7 @@ import argparse
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--batch_size', type=int, default=128)
-parser.add_argument('--epochs', type=int, default=10)
+parser.add_argument('--epochs', type=int, default=1)
 
 parser.add_argument('--vocab_size', type=int, default=20000)
 parser.add_argument('--num_sampled', type=int, default=1000)
@@ -34,8 +34,8 @@ parser.add_argument('--lambda_z', type=float, default=0.1)
 parser.add_argument('--lambda_u', type=float, default=0.1)
 parser.add_argument('--beta', type=float, default=0.1)
 
-parser.add_argument('--model_path', type=str, default = './d_saved_X/X.ckpt')
-parser.add_argument('--model_dir', type=str, default = 'd_saved_X')
+parser.add_argument('--model_path', type=str, default = './saved_X/X.ckpt')
+parser.add_argument('--model_dir', type=str, default = 'saved_X')
 parser.add_argument('--sos_id', type=int, default = 0)
 parser.add_argument('--eos_id', type=int, default = 1)
 
