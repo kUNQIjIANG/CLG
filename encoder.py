@@ -18,12 +18,14 @@ class Encoder(botModel):
 	def encode(self,input_embed,enc_len):
 		with tf.variable_scope(self.scope):
 			_, encoder_final_state = tf.nn.dynamic_rnn(self.encoder_cell, input_embed, 
-																dtype = tf.float32, sequence_length = enc_len)
+											dtype = tf.float32, sequence_length = enc_len)
 			u = self.u_layer(encoder_final_state.c)
 			log_var = self.s_layer(encoder_final_state.c)
+
 			return encoder_final_state, u, log_var
+
 	def output_logits(self,input_embed,enc_len):
 		with tf.variable_scope(self.scope):
 			encoder_output, _ = tf.nn.dynamic_rnn(self.encoder_cell, input_embed, 
-																dtype = tf.float32, sequence_length = enc_len)
+											dtype = tf.float32, sequence_length = enc_len)
 			return encoder_output;

@@ -103,12 +103,12 @@ with tf.Session() as sess:
                 if step < 4e5:
 
                     # VAE train
-                    vae_loss, vae_rec, vae_kl, vae_sen, vae_u, vae_s, sample_c, train_logits = trainer.vaeTrain(sess,
+                    vae_loss, vae_rec, vae_kl, vae_sen, vae_u, vae_s, sample_c, logits = trainer.vaeTrain(sess,
                                      enc_inp, enc_len, dec_inp, dec_len, dec_tar,step)
                     
                     # pre-trian discriminator with supervised label
                     #pre_loss, pre_discri_acc, supv_c = trainer.preTrain(sess, enc_inp, enc_len, enc_label)
-
+                    
                     if step % 1 == 0:
                         
                         #we = sess.run(trainer.word_embed)       
@@ -119,16 +119,17 @@ with tf.Session() as sess:
                         print("step: {}, kl_w: {}, vae_u: {}, vae_s: {}".format(step,kl_weight,vae_u,vae_s))
                         print("step: {}, vae_loss : {}, vae_kl : {}, vae_rec: {}".format(step,vae_loss, vae_kl, vae_rec))
 
-                        """
+                        
                         for tr, truth in zip(inf_ids, test_inp):
                             print("step: {} ".format(step) + "tru: " + ' '.join([data.id2word[id] for id in truth]))
                             print("step: {} ".format(step) + "inf: " + ' '.join([data.id2word[id] for id in tr]))         
+                    
 
                         #print("step: {}, pre-train loss : {}, accuracy : {}".format(step,pre_loss, pre_discri_acc))
                         for tr, truth, sv_t, spl_c in zip(vae_sen, dec_tar, enc_label, sample_c):
                             print("step: {} ".format(step) + "tru: " + ' '.join([data.id2word[id] for id in truth]) + '|| t: {}'.format(np.argmax(sv_t)))
                             print("step: {} ".format(step) + "vae: " + ' '.join([data.id2word[id] for id in tr]) + '|| sample_c: {}'.format(np.argmax(spl_c)))          
-                        """
+                        
                 else:
 
                     # wake phase

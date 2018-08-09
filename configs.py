@@ -34,8 +34,8 @@ parser.add_argument('--lambda_z', type=float, default=0.1)
 parser.add_argument('--lambda_u', type=float, default=0.1)
 parser.add_argument('--beta', type=float, default=0.1)
 
-parser.add_argument('--model_path', type=str, default = './saved_X/X.ckpt')
-parser.add_argument('--model_dir', type=str, default = 'saved_X')
+parser.add_argument('--model_path', type=str, default = './vec_saved_X/X.ckpt')
+parser.add_argument('--model_dir', type=str, default = 'vec_saved_X')
 parser.add_argument('--sos_id', type=int, default = 0)
 parser.add_argument('--eos_id', type=int, default = 1)
 
