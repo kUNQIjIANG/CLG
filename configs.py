@@ -3,11 +3,11 @@ import argparse
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--batch_size', type=int, default=128)
-parser.add_argument('--epochs', type=int, default=1)
+parser.add_argument('--epochs', type=int, default=9)
 
 parser.add_argument('--vocab_size', type=int, default=20000)
 parser.add_argument('--num_sampled', type=int, default=1000)
-parser.add_argument('--word_dropout_rate', type=float, default=0.8)
+parser.add_argument('--word_dropout_rate', type=float, default=0.0)
 
 parser.add_argument('--max_len', type=int, default=15)
 parser.add_argument('--embed_size', type=int, default=300)
@@ -34,8 +34,9 @@ parser.add_argument('--lambda_z', type=float, default=0.1)
 parser.add_argument('--lambda_u', type=float, default=0.1)
 parser.add_argument('--beta', type=float, default=0.1)
 
-parser.add_argument('--model_path', type=str, default = './vec_saved_X/X.ckpt')
-parser.add_argument('--model_dir', type=str, default = 'vec_saved_X')
+parser.add_argument('--model_path', type=str, default = './saved_X/X.ckpt')
+parser.add_argument('--model_dir', type=str, default = 'saved_X')
+parser.add_argument('--wake_path', type=str, default = './wake_saved/wake.ckpt')
 parser.add_argument('--sos_id', type=int, default = 0)
 parser.add_argument('--eos_id', type=int, default = 1)
 

@@ -32,6 +32,7 @@ class DataFlow:
 		pre_x = tf.keras.preprocessing.sequence.pad_sequences(x, self.max_len + 1,
 													truncating = 'pre', padding = 'post')
 
+		pre_x = np.concatenate((np.full([pre_x.shape[0],1],self.word2id['<sos>']),pre_x[:,1:]),axis = -1)
 		x = np.concatenate((pre_x,post_x))
 		y = np.concatenate((y,y))
 		

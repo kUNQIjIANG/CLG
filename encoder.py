@@ -11,7 +11,8 @@ class Encoder(botModel):
 
 	def build_graph(self):
 		with tf.variable_scope(self.scope):
-			self.encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(self.hid_units)
+			self.encoder_cell = tf.nn.rnn_cell.GRUCell(self.hid_units,
+												kernel_initializer = tf.orthogonal_initializer())
 			self.u_layer = tf.layers.Dense(self.z_size,name = 'u_layer')
 			self.s_layer = tf.layers.Dense(self.z_size,name = 's_layer')
 
@@ -19,8 +20,8 @@ class Encoder(botModel):
 		with tf.variable_scope(self.scope):
 			_, encoder_final_state = tf.nn.dynamic_rnn(self.encoder_cell, input_embed, 
 											dtype = tf.float32, sequence_length = enc_len)
-			u = self.u_layer(encoder_final_state.c)
-			log_var = self.s_layer(encoder_final_state.c)
+			u = self.u_layer(encoder_final_state)
+			log_var = self.s_layer(encoder_final_state)
 
 			return encoder_final_state, u, log_var
 
