@@ -1,4 +1,4 @@
 # CLG
 Controllable Language Generation
 
-This is the implementation in fulfill UCL Msc Project.
+This is the implementation in fulfilling UCL Msc Project.
